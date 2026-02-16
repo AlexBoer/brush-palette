@@ -1,0 +1,21 @@
+{
+  "BRUSH_PALETTE.Title": "Brush Palette",
+  "BRUSH_PALETTE.Stroke": "Stroke",
+  "BRUSH_PALETTE.Fill": "Fill",
+  "BRUSH_PALETTE.FillEnabled": "Enable fill",
+  "BRUSH_PALETTE.Color": "Color",
+  "BRUSH_PALETTE.Width": "Width",
+  "BRUSH_PALETTE.Opacity": "Opacity",
+  "BRUSH_PALETTE.Style": "Style",
+  "BRUSH_PALETTE.Smoothing": "Smooth",
+  "BRUSH_PALETTE.StrokeSolid": "Solid",
+  "BRUSH_PALETTE.StrokeDotted": "Dotted",
+  "BRUSH_PALETTE.StrokeDashed": "Dashed",
+  "BRUSH_PALETTE.Presets": "Presets",
+  "BRUSH_PALETTE.PresetNamePlaceholder": "Preset name...",
+  "BRUSH_PALETTE.RestorePresets": "Restore Default Presets",
+  "BRUSH_PALETTE.RestorePresetsHint": "Reset presets to the built-in defaults. This will erase your custom presets.",
+  "BRUSH_PALETTE.RestorePresetsConfirmTitle": "Restore Default Presets?",
+  "BRUSH_PALETTE.RestorePresetsConfirmContent": "This will replace all your current presets with the defaults. Your custom presets will be lost. Are you sure?",
+  "BRUSH_PALETTE.RestorePresetsSuccess": "Presets restored to defaults."
+}

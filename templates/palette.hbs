@@ -1,0 +1,114 @@
+<form autocomplete="off">
+  {{!-- Stroke Section --}}
+  <div class="collapsible{{#if strokeExpanded}} expanded{{/if}}" data-section="stroke">
+    <div class="section-header" data-action="toggleSection" data-section="stroke">
+      <i class="fas fa-caret-right"></i>
+      {{localize "BRUSH_PALETTE.Stroke"}}
+      <span class="section-preview" style="background-color: {{strokeColor}}"></span>
+    </div>
+    <div class="section-content">
+      <div class="form-row">
+        <input type="color" name="strokeColor" value="{{strokeColor}}">
+        <input type="text" name="strokeColorText" value="{{strokeColor}}" class="color-text" maxlength="7">
+        <input type="range" name="strokeAlpha" value="{{strokeAlpha}}" min="0.05" max="1" step="0.05" title="{{localize "BRUSH_PALETTE.StrokeAlpha"}}">
+        <span class="range-value">{{strokeAlphaPct}}%</span>
+      </div>
+      <div class="swatches-row">
+        {{#each swatches}}
+          <button type="button" class="swatch{{#if this.strokeActive}} active{{/if}}"
+                  style="background-color: {{this.hex}}"
+                  data-action="pickStrokeColor" data-color="{{this.hex}}"
+                  title="{{this.hex}}"></button>
+        {{/each}}
+      </div>
+      <div class="form-row">
+        <label>{{localize "BRUSH_PALETTE.Width"}}</label>
+        <input type="range" name="strokeWidth" value="{{strokeWidth}}" min="1" max="50" step="1">
+        <span class="range-value">{{strokeWidth}}px</span>
+      </div>
+      <div class="form-row">
+        <label>{{localize "BRUSH_PALETTE.Style"}}</label>
+        <select name="strokeStyle">
+          <option value="solid" {{#if strokeStyleSolid}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeSolid"}}</option>
+          <option value="dotted" {{#if strokeStyleDotted}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeDotted"}}</option>
+          <option value="dashed" {{#if strokeStyleDashed}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeDashed"}}</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  {{!-- Fill Section --}}
+  <div class="collapsible{{#if fillExpanded}} expanded{{/if}}" data-section="fill">
+    <div class="section-header" data-action="toggleSection" data-section="fill">
+      <i class="fas fa-caret-right"></i>
+      {{localize "BRUSH_PALETTE.Fill"}}
+      {{#if fillEnabled}}
+        <span class="section-preview" style="background-color: {{fillColor}}; opacity: {{fillAlpha}}"></span>
+      {{/if}}
+    </div>
+    <div class="section-content">
+      <div class="form-row fill-toggle-row">
+        <label class="checkbox-label">
+          <input type="checkbox" name="fillEnabled" {{#if fillEnabled}}checked{{/if}}>
+          {{localize "BRUSH_PALETTE.FillEnabled"}}
+        </label>
+      </div>
+      {{#if fillEnabled}}
+      <div class="form-row">
+        <input type="color" name="fillColor" value="{{fillColor}}">
+        <input type="text" name="fillColorText" value="{{fillColor}}" class="color-text" maxlength="7">
+        <input type="range" name="fillAlpha" value="{{fillAlpha}}" min="0" max="1" step="0.05">
+        <span class="range-value">{{fillAlphaPct}}%</span>
+      </div>
+      <div class="swatches-row">
+        {{#each swatches}}
+          <button type="button" class="swatch{{#if this.fillActive}} active{{/if}}"
+                  style="background-color: {{this.hex}}"
+                  data-action="pickFillColor" data-color="{{this.hex}}"
+                  title="{{this.hex}}"></button>
+        {{/each}}
+      </div>
+      {{/if}}
+    </div>
+  </div>
+
+  {{!-- Smoothing --}}
+  <div class="form-row smoothing-row">
+    <label>{{localize "BRUSH_PALETTE.Smoothing"}}</label>
+    <input type="range" name="bezierFactor" value="{{bezierFactor}}" min="0" max="0.5" step="0.05">
+    <span class="range-value">{{bezierFactorPct}}%</span>
+  </div>
+
+  {{!-- Presets Section --}}
+  <div class="collapsible{{#if presetsExpanded}} expanded{{/if}}" data-section="presets">
+    <div class="section-header" data-action="toggleSection" data-section="presets">
+      <i class="fas fa-caret-right"></i>
+      {{localize "BRUSH_PALETTE.Presets"}}
+      <span class="preset-count">({{presets.length}})</span>
+    </div>
+    <div class="section-content">
+      <div class="brush-palette-presets">
+        {{#each presets}}
+          <div class="preset-row" data-index="{{@index}}">
+            <button type="button" class="preset-load" data-action="loadPreset" data-index="{{@index}}" title="{{localize "BRUSH_PALETTE.PresetLoad"}}">
+              <span class="preset-swatch" style="background-color: {{this.strokeColor}}; border-color: {{this.fillColor}}"></span>
+              <span class="preset-name">{{this.name}}</span>
+              <span class="preset-info">{{this.strokeWidth}}px</span>
+            </button>
+            <button type="button" class="preset-delete" data-action="deletePreset" data-index="{{@index}}" title="{{localize "BRUSH_PALETTE.PresetDelete"}}">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        {{/each}}
+      </div>
+      <div class="preset-save-row">
+        <input type="text" name="presetName" placeholder="{{localize "BRUSH_PALETTE.PresetNamePlaceholder"}}" class="preset-name-input" maxlength="30">
+        <button type="button" class="preset-save-btn" data-action="savePreset" title="{{localize "BRUSH_PALETTE.PresetSave"}}">
+          <i class="fas fa-save"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</form>
+  </fieldset>
+</form>

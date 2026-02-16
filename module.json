@@ -1,0 +1,40 @@
+{
+  "id": "brush-palette",
+  "title": "Brush Palette",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "Alex Boer",
+      "flags": {}
+    }
+  ],
+  "relationships": {
+    "requires": [
+      {
+        "id": "lib-wrapper",
+        "type": "module"
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/module.mjs"
+  ],
+  "styles": [
+    "styles/brush-palette.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "flags": {
+    "canUpload": true
+  },
+  "description": "A floating palette for quickly changing drawing brush settings (stroke, fill, etc.)"
+}

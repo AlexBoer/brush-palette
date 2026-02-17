@@ -22,8 +22,8 @@ const DEFAULT_BRUSH = {
 // Stroke style dash patterns (for advanced-drawing-tools compatibility)
 const STROKE_DASH_PATTERNS = {
   solid: null,
-  dotted: [4, 4],
-  dashed: [12, 6],
+  dotted: [4, 8],
+  dashed: [18, 3],
 };
 
 // Default swatches
@@ -168,81 +168,43 @@ Hooks.once("init", () => {
     restricted: false,
   });
 
-  // Register libWrapper early to ensure it's in place before canvas interaction
-  if (typeof libWrapper !== "undefined") {
-    // Wrap _getNewDrawingData to apply brush settings
-    libWrapper.register(
-      MODULE_ID,
-      "DrawingsLayer.prototype._getNewDrawingData",
-      function (wrapped, origin) {
-        const data = wrapped(origin);
+  // Use the public preCreateDrawing hook to apply brush settings to new drawings
+  Hooks.on("preCreateDrawing", (document, data, options, userId) => {
+    // Ensure valid numeric values with safe defaults
+    const strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
+    const strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
+    let fillType = Number(brush.fillType) ?? 0;
+    const fillAlpha = Number(brush.fillAlpha) ?? 0.5;
+    const bezierFactor = Number(brush.bezierFactor) ?? 0;
 
-        // Ensure valid numeric values with safe defaults
-        const strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
-        const strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
-        let fillType = Number(brush.fillType) ?? 0;
-        const fillAlpha = Number(brush.fillAlpha) ?? 0.5;
-        const bezierFactor = Number(brush.bezierFactor) ?? 0;
+    // fillType 2 (pattern) requires a texture - fall back to solid if none
+    if (fillType === 2 && !data.texture) {
+      fillType = 1;
+    }
 
-        // fillType 2 (pattern) requires a texture - fall back to solid if no texture
-        if (fillType === 2 && !data.texture) {
-          fillType = 1;
-        }
+    // Apply our brush palette settings with guaranteed valid values
+    const updateData = {
+      strokeColor: brush.strokeColor || "#000000",
+      strokeWidth: strokeWidth,
+      strokeAlpha: strokeAlpha,
+      fillType: fillType,
+      fillColor: brush.fillColor || "#ffffff",
+      fillAlpha: fillAlpha >= 0 ? fillAlpha : 0.5,
+      bezierFactor: bezierFactor >= 0 ? bezierFactor : 0,
+    };
 
-        // Apply our brush palette settings with guaranteed valid values
-        data.strokeColor = brush.strokeColor || "#000000";
-        data.strokeWidth = strokeWidth;
-        data.strokeAlpha = strokeAlpha;
-        data.fillType = fillType;
-        data.fillColor = brush.fillColor || "#ffffff";
-        data.fillAlpha = fillAlpha >= 0 ? fillAlpha : 0.5;
-        data.bezierFactor = bezierFactor >= 0 ? bezierFactor : 0;
+    // Apply stroke style (dashed lines) via advanced-drawing-tools flags
+    const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
+    if (dashPattern) {
+      updateData.flags = {
+        "advanced-drawing-tools": {
+          lineStyle: { dash: dashPattern },
+        },
+      };
+    }
 
-        // Apply stroke style (dashed lines) via advanced-drawing-tools flags
-        const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
-        if (dashPattern) {
-          data.flags = data.flags || {};
-          data.flags["advanced-drawing-tools"] =
-            data.flags["advanced-drawing-tools"] || {};
-          data.flags["advanced-drawing-tools"].lineStyle =
-            data.flags["advanced-drawing-tools"].lineStyle || {};
-          data.flags["advanced-drawing-tools"].lineStyle.dash = dashPattern;
-        }
-
-        return data;
-      },
-      "WRAPPER",
-    );
-
-    // Also wrap _onDragLeftStart to fix any validation issues before document creation
-    libWrapper.register(
-      MODULE_ID,
-      "DrawingsLayer.prototype._onDragLeftStart",
-      async function (wrapped, event) {
-        // Ensure brush values are valid before any drawing starts
-        brush.strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
-        brush.strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
-        if (!brush.strokeColor) brush.strokeColor = "#000000";
-
-        // Update core config and WAIT for it to complete before drawing
-        await _updateCoreDrawingConfig();
-
-        return await wrapped(event);
-      },
-      "WRAPPER",
-    );
-
-    // Mark compatibility with advanced-drawing-tools
-    libWrapper.ignore_conflicts(
-      MODULE_ID,
-      "advanced-drawing-tools",
-      "DrawingsLayer.prototype._getNewDrawingData",
-    );
-  } else {
-    console.warn(
-      `${MODULE_ID} | libWrapper not found - brush settings will not be applied to new drawings`,
-    );
-  }
+    document.updateSource(updateData);
+  });
 });
 
 /**
@@ -346,8 +308,7 @@ Hooks.on("canvasTearDown", () => {
  * Check if a drawing tool is currently active
  */
 function _isDrawingToolActive() {
-  const activeControl = ui.controls?.activeControl;
-  return activeControl === "drawings";
+  return ui.controls?.control?.name === "drawings";
 }
 
 /**
@@ -417,18 +378,21 @@ export function saveBrushSettings() {
  */
 async function _updateCoreDrawingConfig() {
   try {
-    // The core config must ALWAYS pass Foundry's validation
-    // fillType 2 (pattern) without texture fails validation
-    // So we use fillType 1 (solid) and full opacity for the default
-    // Our _getNewDrawingData wrapper will apply the actual brush values
+    // Use actual brush values so the drawing preview matches the final result.
+    // fillType 2 (pattern) without a texture fails Foundry validation,
+    // so fall back to solid (1) in that case.
+    let fillType = Number(brush.fillType) ?? 0;
+    if (fillType === 2) fillType = 1;
+
     const config = {
       strokeColor: brush.strokeColor || "#000000",
       strokeWidth: Math.max(1, brush.strokeWidth || 8),
-      strokeAlpha: 1, // Full opacity to guarantee visible stroke
-      fillType: 1, // Solid fill (pattern needs texture)
+      strokeAlpha: Math.max(0.1, Number(brush.strokeAlpha) || 1),
+      fillType: fillType,
       fillColor: brush.fillColor || "#ffffff",
-      fillAlpha: 1, // Full opacity to guarantee visible fill
-      bezierFactor: brush.bezierFactor ?? 0,
+      fillAlpha: Number(brush.fillAlpha) >= 0 ? Number(brush.fillAlpha) : 0.5,
+      bezierFactor:
+        Number(brush.bezierFactor) >= 0 ? Number(brush.bezierFactor) : 0,
     };
 
     await game.settings.set("core", "defaultDrawingConfig", config);

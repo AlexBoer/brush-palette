@@ -80,6 +80,7 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
       fillAlphaPct: Math.round(brush.fillAlpha * 100),
       bezierFactor: brush.bezierFactor,
       bezierFactorPct: Math.round(brush.bezierFactor * 200), // 0-0.5 mapped to 0-100%
+      adtActive: !!game.modules.get("advanced-drawing-tools")?.active,
       swatches,
       presets,
       strokeExpanded: this._sectionState.stroke,

@@ -121,6 +121,9 @@ let palette = null;
 // Track drawing tool state
 let _wasDrawingActive = false;
 
+// Guard flag: true while we are writing to core.defaultDrawingConfig ourselves
+let _selfUpdatingCoreConfig = false;
+
 /**
  * Initialize the module
  */
@@ -194,13 +197,15 @@ Hooks.once("init", () => {
     };
 
     // Apply stroke style (dashed lines) via advanced-drawing-tools flags
-    const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
-    if (dashPattern) {
-      updateData.flags = {
-        "advanced-drawing-tools": {
-          lineStyle: { dash: dashPattern },
-        },
-      };
+    if (game.modules.get("advanced-drawing-tools")?.active) {
+      const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
+      if (dashPattern) {
+        updateData.flags = {
+          "advanced-drawing-tools": {
+            lineStyle: { dash: dashPattern },
+          },
+        };
+      }
     }
 
     document.updateSource(updateData);
@@ -294,6 +299,77 @@ Hooks.on("renderSceneControls", (controls, html) => {
   }
 
   _wasDrawingActive = isDrawingActive;
+});
+
+/**
+ * Listen for external changes to core.defaultDrawingConfig (e.g. from
+ * precise-drawing-tools' eyedropper colour picker) and sync them into the
+ * brush palette so that our preCreateDrawing hook doesn't overwrite them.
+ */
+Hooks.on("updateSetting", (setting) => {
+  // Only care about the core drawing defaults
+  if (setting.key !== "core.defaultDrawingConfig") return;
+
+  // Ignore changes we made ourselves
+  if (_selfUpdatingCoreConfig) return;
+
+  // Only act while the drawings layer is active
+  if (!_isDrawingToolActive()) return;
+
+  try {
+    const newConfig =
+      typeof setting.value === "string"
+        ? JSON.parse(setting.value)
+        : setting.value;
+    if (!newConfig || typeof newConfig !== "object") return;
+
+    let changed = false;
+
+    // Sync stroke properties
+    if (newConfig.strokeColor && newConfig.strokeColor !== brush.strokeColor) {
+      brush.strokeColor = newConfig.strokeColor;
+      changed = true;
+    }
+    if (
+      newConfig.strokeAlpha !== undefined &&
+      newConfig.strokeAlpha !== brush.strokeAlpha
+    ) {
+      brush.strokeAlpha = Math.max(0.05, Number(newConfig.strokeAlpha) || 1);
+      changed = true;
+    }
+
+    // Sync fill properties
+    if (newConfig.fillColor && newConfig.fillColor !== brush.fillColor) {
+      brush.fillColor = newConfig.fillColor;
+      changed = true;
+    }
+    if (
+      newConfig.fillAlpha !== undefined &&
+      newConfig.fillAlpha !== brush.fillAlpha
+    ) {
+      brush.fillAlpha = Math.max(0, Number(newConfig.fillAlpha) || 0);
+      changed = true;
+    }
+
+    if (changed) {
+      // Persist the updated brush so it survives reloads
+      saveBrushSettings();
+
+      // Re-render the palette UI so the new colours are visible
+      if (palette?.rendered) {
+        palette.render();
+      }
+
+      console.debug(
+        `${MODULE_ID} | Synced external drawing config change into brush palette`,
+      );
+    }
+  } catch (e) {
+    console.warn(
+      `${MODULE_ID} | Failed to sync external drawing config change:`,
+      e,
+    );
+  }
 });
 
 /**
@@ -395,8 +471,31 @@ async function _updateCoreDrawingConfig() {
         Number(brush.bezierFactor) >= 0 ? Number(brush.bezierFactor) : 0,
     };
 
+    // Include dash pattern flags so the live preview also renders
+    // dashed/dotted lines (advanced-drawing-tools reads these flags).
+    if (game.modules.get("advanced-drawing-tools")?.active) {
+      const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
+      if (dashPattern) {
+        config.flags = {
+          "advanced-drawing-tools": {
+            lineStyle: { dash: dashPattern },
+          },
+        };
+      } else {
+        // Explicitly clear any previous dash pattern
+        config.flags = {
+          "advanced-drawing-tools": {
+            lineStyle: { dash: null },
+          },
+        };
+      }
+    }
+
+    _selfUpdatingCoreConfig = true;
     await game.settings.set("core", "defaultDrawingConfig", config);
+    _selfUpdatingCoreConfig = false;
   } catch (e) {
+    _selfUpdatingCoreConfig = false;
     console.warn(
       `${MODULE_ID} | Could not update core defaultDrawingConfig:`,
       e,

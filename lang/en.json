@@ -17,5 +17,8 @@
   "BRUSH_PALETTE.RestorePresetsHint": "Reset presets to the built-in defaults. This will erase your custom presets.",
   "BRUSH_PALETTE.RestorePresetsConfirmTitle": "Restore Default Presets?",
   "BRUSH_PALETTE.RestorePresetsConfirmContent": "This will replace all your current presets with the defaults. Your custom presets will be lost. Are you sure?",
-  "BRUSH_PALETTE.RestorePresetsSuccess": "Presets restored to defaults."
+  "BRUSH_PALETTE.RestorePresetsSuccess": "Presets restored to defaults.",
+  "BRUSH_PALETTE.RibbonBrush": "Ribbon Brush",
+  "BRUSH_PALETTE.Experimental": "EXPERIMENTAL",
+  "BRUSH_PALETTE.ExperimentalHint": "Enable experimental features such as the Ribbon Brush drawing tool. Requires reload."
 }

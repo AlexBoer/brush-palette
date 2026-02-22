@@ -4,6 +4,7 @@
  */
 
 import { BrushPalette } from "./BrushPalette.mjs";
+import { RibbonBrush, RIBBON_FLAG } from "./RibbonBrush.mjs";
 
 const MODULE_ID = "brush-palette";
 
@@ -171,8 +172,25 @@ Hooks.once("init", () => {
     restricted: false,
   });
 
+  // World-scoped toggle for experimental features (Ribbon Brush)
+  game.settings.register(MODULE_ID, "experimental", {
+    name: "BRUSH_PALETTE.Experimental",
+    hint: "BRUSH_PALETTE.ExperimentalHint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    requiresReload: true,
+  });
+
+  // Register the Ribbon Brush drawing tool
+  RibbonBrush.register();
+
   // Use the public preCreateDrawing hook to apply brush settings to new drawings
   Hooks.on("preCreateDrawing", (document, data, options, userId) => {
+    // Skip ribbon brush drawings – they are pre-configured polygons
+    if (data?.flags?.[MODULE_ID]?.[RIBBON_FLAG]) return;
+
     // Ensure valid numeric values with safe defaults
     const strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
     const strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
@@ -261,6 +279,36 @@ Hooks.once("ready", () => {
   // Update Foundry's core drawing config to match our brush
   // This is critical to prevent validation errors in _onDragLeftStart
   _updateCoreDrawingConfig();
+
+  // Fix dash/dot preview: Foundry's defaultDrawingConfig may not propagate
+  // flags to the preview drawing, so advanced-drawing-tools never sees them
+  // during the live preview phase.  We wrap _onDragLeftStart to inject the
+  // dash-pattern flags directly into the preview drawing's document source
+  // right after Foundry creates it.
+  if (game.modules.get("advanced-drawing-tools")?.active) {
+    libWrapper.register(
+      MODULE_ID,
+      "foundry.canvas.layers.DrawingsLayer.prototype._onDragLeftStart",
+      function (wrapped, event) {
+        const result = wrapped(event);
+        const preview = event.interactionData?.preview;
+        if (preview?.document) {
+          const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
+          preview.document.updateSource({
+            flags: {
+              "advanced-drawing-tools": {
+                lineStyle: { dash: dashPattern },
+              },
+            },
+          });
+          // Force a shape re-render so ADT picks up the flags
+          preview.renderFlags?.set?.({ refreshShape: true });
+        }
+        return result;
+      },
+      "WRAPPER",
+    );
+  }
 });
 
 /**

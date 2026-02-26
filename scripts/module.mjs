@@ -191,6 +191,11 @@ Hooks.once("init", () => {
     // Skip ribbon brush drawings – they are pre-configured polygons
     if (data?.flags?.[MODULE_ID]?.[RIBBON_FLAG]) return;
 
+    // Only apply brush settings when a built-in drawing tool is active.
+    // This prevents overwriting styles set by other modules (e.g. Fate Aspect Tracker)
+    // that create drawings programmatically.
+    if (!_isBuiltInDrawingToolActive()) return;
+
     // Ensure valid numeric values with safe defaults
     const strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
     const strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
@@ -433,6 +438,31 @@ Hooks.on("canvasTearDown", () => {
  */
 function _isDrawingToolActive() {
   return ui.controls?.control?.name === "drawings";
+}
+
+/**
+ * Built-in Foundry drawing creation tools (plus our ribbon tool).
+ * Used to limit brush-palette overrides to only user-initiated drawings.
+ */
+const DRAWING_CREATION_TOOLS = new Set([
+  "freehand",
+  "polygon",
+  "rect",
+  "ellipse",
+  "text",
+  "ribbon",
+]);
+
+/**
+ * Check if the user is actively using a built-in drawing creation tool.
+ * Returns false when another module (e.g. Fate Aspect Tracker) creates
+ * drawings programmatically, so we don't overwrite their styles.
+ */
+function _isBuiltInDrawingToolActive() {
+  return (
+    ui.controls?.control?.name === "drawings" &&
+    DRAWING_CREATION_TOOLS.has(game.activeTool)
+  );
 }
 
 /**

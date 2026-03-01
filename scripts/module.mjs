@@ -340,9 +340,10 @@ function _validateBrush() {
 }
 
 /**
- * Monitor scene controls to show/hide palette when drawing tools are active
+ * Shared logic: show/hide the palette based on whether a drawing creation
+ * tool is currently active.
  */
-Hooks.on("renderSceneControls", (controls, html) => {
+function _syncPaletteVisibility() {
   const isDrawingActive = _isDrawingToolActive();
 
   if (isDrawingActive && !_wasDrawingActive) {
@@ -352,6 +353,19 @@ Hooks.on("renderSceneControls", (controls, html) => {
   }
 
   _wasDrawingActive = isDrawingActive;
+}
+
+/**
+ * Monitor scene controls to show/hide palette when switching layers.
+ */
+Hooks.on("renderSceneControls", () => _syncPaletteVisibility());
+
+/**
+ * Use the v13 SceneControls "activate" event to detect tool switches
+ * within the same layer (e.g. select -> rect inside drawings).
+ */
+Hooks.once("ready", () => {
+  ui.controls?.addEventListener("activate", () => _syncPaletteVisibility());
 });
 
 /**
@@ -434,13 +448,6 @@ Hooks.on("canvasTearDown", () => {
 });
 
 /**
- * Check if a drawing tool is currently active
- */
-function _isDrawingToolActive() {
-  return ui.controls?.control?.name === "drawings";
-}
-
-/**
  * Built-in Foundry drawing creation tools (plus our ribbon tool).
  * Used to limit brush-palette overrides to only user-initiated drawings.
  */
@@ -454,16 +461,24 @@ const DRAWING_CREATION_TOOLS = new Set([
 ]);
 
 /**
- * Check if the user is actively using a built-in drawing creation tool.
- * Returns false when another module (e.g. Fate Aspect Tracker) creates
- * drawings programmatically, so we don't overwrite their styles.
+ * Check if a drawing creation tool is currently active.
+ * Returns false when the drawings layer is active but only the select tool
+ * is chosen (no palette needed in that case).
  */
-function _isBuiltInDrawingToolActive() {
+function _isDrawingToolActive() {
   return (
     ui.controls?.control?.name === "drawings" &&
     DRAWING_CREATION_TOOLS.has(game.activeTool)
   );
 }
+
+/**
+ * Check if the user is actively using a built-in drawing creation tool.
+ * Returns false when another module (e.g. Fate Aspect Tracker) creates
+ * drawings programmatically, so we don't overwrite their styles.
+ * @alias _isDrawingToolActive (same check)
+ */
+const _isBuiltInDrawingToolActive = _isDrawingToolActive;
 
 /**
  * Show the palette window

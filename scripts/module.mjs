@@ -122,8 +122,13 @@ let palette = null;
 // Track drawing tool state
 let _wasDrawingActive = false;
 
-// Guard flag: true while we are writing to core.defaultDrawingConfig ourselves
+// Guard flag: true while we are writing to the core drawing config ourselves
 let _selfUpdatingCoreConfig = false;
+
+// The core client setting key that stores default drawing data.
+// V13: "defaultDrawingConfig"  |  V14+: "drawingPalette"
+const _coreDrawingSettingKey = () =>
+  game.release?.generation >= 14 ? "drawingPalette" : "defaultDrawingConfig";
 
 /**
  * Initialize the module
@@ -369,13 +374,14 @@ Hooks.once("ready", () => {
 });
 
 /**
- * Listen for external changes to core.defaultDrawingConfig (e.g. from
+ * Listen for external changes to the core drawing config (e.g. from
  * precise-drawing-tools' eyedropper colour picker) and sync them into the
  * brush palette so that our preCreateDrawing hook doesn't overwrite them.
+ * The setting key changed from "defaultDrawingConfig" (V13) to "drawingPalette" (V14+).
  */
 Hooks.on("updateSetting", (setting) => {
   // Only care about the core drawing defaults
-  if (setting.key !== "core.defaultDrawingConfig") return;
+  if (setting.key !== `core.${_coreDrawingSettingKey()}`) return;
 
   // Ignore changes we made ourselves
   if (_selfUpdatingCoreConfig) return;
@@ -534,18 +540,18 @@ function _loadPersistedBrush() {
 export function saveBrushSettings() {
   game.settings.set(MODULE_ID, "lastBrush", { ...brush });
 
-  // Also update Foundry's core defaultDrawingConfig so validation passes
-  // This is critical because _onDragLeftStart validates the default config
-  // BEFORE creating the drawing with our modified data
+  // Also update Foundry's core drawing config so new drawings pick up our settings.
+  // The key changed in V14+ (defaultDrawingConfig → drawingPalette).
   _updateCoreDrawingConfig();
 }
 
 /**
- * Update Foundry's core defaultDrawingConfig with current brush settings
- * This ensures the default config validation passes in _onDragLeftStart
- * @returns {Promise} Resolves when settings are saved
+ * Update Foundry's core drawing config client storage with current brush settings.
+ * V13: stores under "core.defaultDrawingConfig"
+ * V14+: stores under "core.drawingPalette"
+ * Writes directly to storage to avoid the registered-setting assertion.
  */
-async function _updateCoreDrawingConfig() {
+function _updateCoreDrawingConfig() {
   try {
     // Use actual brush values so the drawing preview matches the final result.
     // fillType 2 (pattern) without a texture fails Foundry validation,
@@ -584,15 +590,17 @@ async function _updateCoreDrawingConfig() {
       }
     }
 
+    // Write directly to client storage instead of game.settings.set() to avoid
+    // the #assertSetting registration check. Foundry reads creation defaults
+    // from this same storage location. The key changed in V14+.
     _selfUpdatingCoreConfig = true;
-    await game.settings.set("core", "defaultDrawingConfig", config);
+    game.settings.storage
+      .get("client")
+      .setItem(`core.${_coreDrawingSettingKey()}`, JSON.stringify(config));
     _selfUpdatingCoreConfig = false;
   } catch (e) {
     _selfUpdatingCoreConfig = false;
-    console.warn(
-      `${MODULE_ID} | Could not update core defaultDrawingConfig:`,
-      e,
-    );
+    console.warn(`${MODULE_ID} | Could not update core drawing config:`, e);
   }
 }
 

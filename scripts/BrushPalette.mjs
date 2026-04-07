@@ -153,7 +153,7 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
         }
         break;
       case "strokeWidth":
-        brush.strokeWidth = Math.max(1, parseInt(value, 10) || 1);
+        brush.strokeWidth = Math.max(0, parseInt(value, 10) || 1);
         this.#updateRangeValue(input, `${brush.strokeWidth}px`);
         break;
       case "strokeAlpha":

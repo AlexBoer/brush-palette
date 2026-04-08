@@ -41,8 +41,14 @@
   border-radius: 3px 3px 0 0;
 }
 
-#brush-palette .collapsible .section-header:hover {
+#brush-palette .collapsible .section-header:hover,
+#brush-palette .collapsible .section-header:focus-visible {
   background: var(--color-bg-option-hover, #e8e8d8);
+}
+
+#brush-palette .collapsible .section-header:focus-visible {
+  outline: 2px solid var(--color-border-highlight, #7a7971);
+  outline-offset: -2px;
 }
 
 #brush-palette .collapsible .section-header i {
@@ -174,9 +180,15 @@
   transition: transform 0.1s, border-color 0.1s;
 }
 
-#brush-palette .swatch:hover {
+#brush-palette .swatch:hover,
+#brush-palette .swatch:focus-visible {
   transform: scale(1.15);
   border-color: var(--color-border-highlight, #7a7971);
+}
+
+#brush-palette .swatch:focus-visible {
+  outline: 2px solid var(--color-border-highlight, #7a7971);
+  outline-offset: 1px;
 }
 
 #brush-palette .swatch.active {
@@ -222,8 +234,14 @@
   color: #191813;
 }
 
-#brush-palette .preset-load:hover {
+#brush-palette .preset-load:hover,
+#brush-palette .preset-load:focus-visible {
   background: var(--color-bg-option-hover, #e8e8d8);
+}
+
+#brush-palette .preset-load:focus-visible {
+  outline: 2px solid var(--color-border-highlight, #7a7971);
+  outline-offset: -2px;
 }
 
 #brush-palette .preset-swatch {
@@ -262,9 +280,15 @@
   font-size: 0.8em;
 }
 
-#brush-palette .preset-delete:hover {
+#brush-palette .preset-delete:hover,
+#brush-palette .preset-delete:focus-visible {
   color: #c00;
   background: rgba(200, 0, 0, 0.1);
+}
+
+#brush-palette .preset-delete:focus-visible {
+  outline: 2px solid #c00;
+  outline-offset: -1px;
 }
 
 #brush-palette .preset-save-row {
@@ -284,4 +308,22 @@
   padding: 0;
   cursor: pointer;
   font-size: 0.85em;
+}
+
+#brush-palette .preset-save-btn:focus-visible {
+  outline: 2px solid var(--color-border-highlight, #7a7971);
+  outline-offset: -1px;
+}
+
+/* =================================================================
+   Accessibility: Reduced Motion
+   ================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  #brush-palette .collapsible .section-header,
+  #brush-palette .collapsible .section-header i,
+  #brush-palette .swatch,
+  #brush-palette .preset-load,
+  #brush-palette .preset-delete {
+    transition: none !important;
+  }
 }

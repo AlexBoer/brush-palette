@@ -113,7 +113,29 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
-   * Set up event listeners after render
+   * One-time setup: event listeners that persist across re-renders
+   */
+  _onFirstRender(context, options) {
+    super._onFirstRender?.(context, options);
+
+    const html = this.element;
+
+    // Live update handlers for inputs
+    html.addEventListener("input", this.#onInputChange.bind(this));
+    html.addEventListener("change", this.#onInputChange.bind(this));
+
+    // Keyboard support for section headers (role="button")
+    html.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const header = ev.target.closest('.section-header[role="button"]');
+      if (!header) return;
+      ev.preventDefault();
+      header.click();
+    });
+  }
+
+  /**
+   * Post-render setup (runs on every render)
    */
   _onRender(context, options) {
     super._onRender(context, options);
@@ -123,12 +145,6 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     if (savedPos && this.#isPositionInViewport(savedPos)) {
       this.setPosition({ left: savedPos.left, top: savedPos.top });
     }
-
-    const html = this.element;
-
-    // Live update handlers for inputs
-    html.addEventListener("input", this.#onInputChange.bind(this));
-    html.addEventListener("change", this.#onInputChange.bind(this));
   }
 
   /**
@@ -257,13 +273,17 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!section) return;
 
     this._sectionState[section] = !this._sectionState[section];
+    const expanded = this._sectionState[section];
 
     const container = this.element.querySelector(
       `.collapsible[data-section="${section}"]`,
     );
     if (container) {
-      container.classList.toggle("expanded", this._sectionState[section]);
+      container.classList.toggle("expanded", expanded);
     }
+
+    // Sync aria-expanded on the header
+    target.setAttribute("aria-expanded", String(expanded));
   }
 
   /**

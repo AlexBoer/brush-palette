@@ -1,115 +1,184 @@
-<form autocomplete="off">
-  {{!-- Stroke Section --}}
-  <div class="collapsible{{#if strokeExpanded}} expanded{{/if}}" data-section="stroke">
-    <div class="section-header" role="button" tabindex="0" aria-expanded="{{strokeExpanded}}" data-action="toggleSection" data-section="stroke">
-      <i class="fas fa-caret-right" aria-hidden="true"></i>
-      {{localize "BRUSH_PALETTE.Stroke"}}
-      <span class="section-preview" style="background-color: {{strokeColor}}" aria-hidden="true"></span>
-    </div>
+﻿<form class="standard-form" autocomplete="off">
+
+  {{!-- Lines Section --}}
+  <details data-section="stroke" {{#if strokeExpanded}}open{{/if}}>
+    <summary>
+      {{localize "BRUSH_PALETTE.Lines"}}
+      <span class="section-preview" style="background-color: {{strokeColor}}"></span>
+    </summary>
     <div class="section-content">
-      <div class="form-row">
-        <input type="color" name="strokeColor" value="{{strokeColor}}" aria-label="{{localize 'BRUSH_PALETTE.StrokeColor'}}">
-        <input type="text" name="strokeColorText" value="{{strokeColor}}" class="color-text" maxlength="7" aria-label="{{localize 'BRUSH_PALETTE.StrokeColorHex'}}">
-        <input type="range" name="strokeAlpha" value="{{strokeAlpha}}" min="0.05" max="1" step="0.05" aria-label="{{localize 'BRUSH_PALETTE.StrokeAlpha'}}">
-        <span class="range-value" aria-hidden="true">{{strokeAlphaPct}}%</span>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.LineWidth"}}</label>
+        <div class="form-fields">
+          <input type="range" name="strokeWidth" value="{{strokeWidth}}" min="1" max="50" step="1">
+          <span class="range-value">{{strokeWidth}}px</span>
+        </div>
+      </div>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.LineColor"}}</label>
+        <div class="form-fields">
+          <input type="color" name="strokeColor" value="{{strokeColor}}" aria-label="{{localize 'BRUSH_PALETTE.StrokeColor'}}">
+          <input type="text" name="strokeColorText" value="{{strokeColor}}" class="color-text" maxlength="7" aria-label="{{localize 'BRUSH_PALETTE.StrokeColorHex'}}">
+        </div>
+      </div>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.LineOpacity"}}</label>
+        <div class="form-fields">
+          <input type="range" name="strokeAlpha" value="{{strokeAlpha}}" min="0.05" max="1" step="0.05">
+          <span class="range-value">{{strokeAlphaPct}}%</span>
+        </div>
+      </div>
+      {{#if adtActive}}
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.Style"}}</label>
+        <div class="form-fields">
+          <select name="strokeStyle">
+            <option value="solid" {{#if strokeStyleSolid}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeSolid"}}</option>
+            <option value="dotted" {{#if strokeStyleDotted}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeDotted"}}</option>
+            <option value="dashed" {{#if strokeStyleDashed}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeDashed"}}</option>
+          </select>
+        </div>
+      </div>
+      {{/if}}
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.Smoothing"}}</label>
+        <div class="form-fields">
+          <input type="range" name="bezierFactor" value="{{bezierFactor}}" min="0" max="0.5" step="0.05">
+          <span class="range-value">{{bezierFactorPct}}%</span>
+        </div>
       </div>
       <div class="swatches-row" role="group" aria-label="{{localize 'BRUSH_PALETTE.StrokeSwatches'}}">
         {{#each swatches}}
           <button type="button" class="swatch{{#if this.strokeActive}} active{{/if}}"
                   style="background-color: {{this.hex}}"
-                  data-action="pickStrokeColor" data-color="{{this.hex}}"
-                  aria-label="{{this.hex}}" title="{{this.hex}}"></button>
+                  data-action="pickStrokeColor" data-color="{{this.hex}}" data-index="{{@index}}"
+                  title="{{this.hex}}"></button>
         {{/each}}
       </div>
-      <div class="form-row">
-        <label for="bp-strokeWidth">{{localize "BRUSH_PALETTE.Width"}}</label>
-        <input type="range" id="bp-strokeWidth" name="strokeWidth" value="{{strokeWidth}}" min="1" max="50" step="1">
-        <span class="range-value" aria-hidden="true">{{strokeWidth}}px</span>
-      </div>
-      {{#if adtActive}}
-      <div class="form-row">
-        <label for="bp-strokeStyle">{{localize "BRUSH_PALETTE.Style"}}</label>
-        <select id="bp-strokeStyle" name="strokeStyle">
-          <option value="solid" {{#if strokeStyleSolid}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeSolid"}}</option>
-          <option value="dotted" {{#if strokeStyleDotted}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeDotted"}}</option>
-          <option value="dashed" {{#if strokeStyleDashed}}selected{{/if}}>{{localize "BRUSH_PALETTE.StrokeDashed"}}</option>
-        </select>
-      </div>
-      {{/if}}
     </div>
-  </div>
+  </details>
 
   {{!-- Fill Section --}}
-  <div class="collapsible{{#if fillExpanded}} expanded{{/if}}" data-section="fill">
-    <div class="section-header" role="button" tabindex="0" aria-expanded="{{fillExpanded}}" data-action="toggleSection" data-section="fill">
-      <i class="fas fa-caret-right" aria-hidden="true"></i>
+  <details data-section="fill" {{#if fillExpanded}}open{{/if}}>
+    <summary>
       {{localize "BRUSH_PALETTE.Fill"}}
-      {{#if fillEnabled}}
-        <span class="section-preview" style="background-color: {{fillColor}}; opacity: {{fillAlpha}}" aria-hidden="true"></span>
-      {{/if}}
-    </div>
+      {{#if fillEnabled}}<span class="section-preview" style="background-color: {{fillColor}}"></span>{{/if}}
+    </summary>
     <div class="section-content">
-      <div class="form-row fill-toggle-row">
+      <div class="form-group slim">
         <label class="checkbox-label">
           <input type="checkbox" name="fillEnabled" {{#if fillEnabled}}checked{{/if}}>
           {{localize "BRUSH_PALETTE.FillEnabled"}}
         </label>
       </div>
-      {{#if fillEnabled}}
-      <div class="form-row">
-        <input type="color" name="fillColor" value="{{fillColor}}" aria-label="{{localize 'BRUSH_PALETTE.FillColor'}}">
-        <input type="text" name="fillColorText" value="{{fillColor}}" class="color-text" maxlength="7" aria-label="{{localize 'BRUSH_PALETTE.FillColorHex'}}">
-        <input type="range" name="fillAlpha" value="{{fillAlpha}}" min="0" max="1" step="0.05" aria-label="{{localize 'BRUSH_PALETTE.FillAlpha'}}">
-        <span class="range-value" aria-hidden="true">{{fillAlphaPct}}%</span>
+      <div class="fill-controls"{{#unless fillEnabled}} hidden{{/unless}}>
+        <div class="form-group slim">
+          <label>{{localize "BRUSH_PALETTE.FillColor"}}</label>
+          <div class="form-fields">
+            <input type="color" name="fillColor" value="{{fillColor}}" aria-label="{{localize 'BRUSH_PALETTE.FillColor'}}">
+            <input type="text" name="fillColorText" value="{{fillColor}}" class="color-text" maxlength="7" aria-label="{{localize 'BRUSH_PALETTE.FillColorHex'}}">
+          </div>
+        </div>
+        <div class="form-group slim">
+          <label>{{localize "BRUSH_PALETTE.Opacity"}}</label>
+          <div class="form-fields">
+            <input type="range" name="fillAlpha" value="{{fillAlpha}}" min="0" max="1" step="0.05">
+            <span class="range-value">{{fillAlphaPct}}%</span>
+          </div>
+        </div>
+        <div class="swatches-row" role="group" aria-label="{{localize 'BRUSH_PALETTE.FillSwatches'}}">
+          {{#each swatches}}
+            <button type="button" class="swatch{{#if this.fillActive}} active{{/if}}"
+                    style="background-color: {{this.hex}}"
+                    data-action="pickFillColor" data-color="{{this.hex}}" data-index="{{@index}}"
+                    title="{{this.hex}}"></button>
+          {{/each}}
+        </div>
       </div>
-      <div class="swatches-row" role="group" aria-label="{{localize 'BRUSH_PALETTE.FillSwatches'}}">
-        {{#each swatches}}
-          <button type="button" class="swatch{{#if this.fillActive}} active{{/if}}"
-                  style="background-color: {{this.hex}}"
-                  data-action="pickFillColor" data-color="{{this.hex}}"
-                  aria-label="{{this.hex}}" title="{{this.hex}}"></button>
-        {{/each}}
-      </div>
-      {{/if}}
     </div>
-  </div>
+  </details>
 
-  {{!-- Smoothing --}}
-  <div class="form-row smoothing-row">
-    <label for="bp-bezierFactor">{{localize "BRUSH_PALETTE.Smoothing"}}</label>
-    <input type="range" id="bp-bezierFactor" name="bezierFactor" value="{{bezierFactor}}" min="0" max="0.5" step="0.05">
-    <span class="range-value" aria-hidden="true">{{bezierFactorPct}}%</span>
-  </div>
+  {{!-- Text Section --}}
+  <details data-section="text" {{#if textExpanded}}open{{/if}}>
+    <summary>{{localize "BRUSH_PALETTE.Text"}}</summary>
+    <div class="section-content">
+      <div class="form-group slim full-width">
+        <label>{{localize "BRUSH_PALETTE.TextLabel"}}</label>
+        <div class="form-fields">
+          <input type="text" name="text" value="{{text}}" placeholder="{{localize 'BRUSH_PALETTE.TextLabelPlaceholder'}}">
+        </div>
+      </div>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.TextFontFamily"}}</label>
+        <div class="form-fields">
+          <select name="fontFamily">
+            <option value="">{{localize "COMMON.Default"}}</option>
+            {{#each fontFamilies}}
+              <option value="{{this.value}}"{{#if this.selected}} selected{{/if}}>{{this.label}}</option>
+            {{/each}}
+          </select>
+        </div>
+      </div>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.TextFontSize"}}</label>
+        <div class="form-fields">
+          <input type="range" name="fontSize" value="{{fontSize}}" min="8" max="128" step="2">
+          <span class="range-value">{{fontSize}}px</span>
+        </div>
+      </div>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.TextColor"}}</label>
+        <div class="form-fields">
+          <input type="color" name="textColor" value="{{textColor}}" aria-label="{{localize 'BRUSH_PALETTE.TextColor'}}">
+          <input type="text" name="textColorText" value="{{textColor}}" class="color-text" maxlength="7">
+        </div>
+      </div>
+      <div class="form-group slim">
+        <label>{{localize "BRUSH_PALETTE.Opacity"}}</label>
+        <div class="form-fields">
+          <input type="range" name="textAlpha" value="{{textAlpha}}" min="0" max="1" step="0.05">
+          <span class="range-value">{{textAlphaPct}}%</span>
+        </div>
+      </div>
+    </div>
+  </details>
 
   {{!-- Presets Section --}}
-  <div class="collapsible{{#if presetsExpanded}} expanded{{/if}}" data-section="presets">
-    <div class="section-header" role="button" tabindex="0" aria-expanded="{{presetsExpanded}}" data-action="toggleSection" data-section="presets">
-      <i class="fas fa-caret-right" aria-hidden="true"></i>
+  <details data-section="presets" {{#if presetsExpanded}}open{{/if}}>
+    <summary>
       {{localize "BRUSH_PALETTE.Presets"}}
       <span class="preset-count">({{presets.length}})</span>
-    </div>
+    </summary>
     <div class="section-content">
       <div class="brush-palette-presets">
         {{#each presets}}
           <div class="preset-row" data-index="{{@index}}">
-            <button type="button" class="preset-load" data-action="loadPreset" data-index="{{@index}}" aria-label="{{localize 'BRUSH_PALETTE.PresetLoad'}}: {{this.name}}" title="{{localize 'BRUSH_PALETTE.PresetLoad'}}">
-              <span class="preset-swatch" style="background-color: {{this.strokeColor}}; border-color: {{this.fillColor}}" aria-hidden="true"></span>
+            <button type="button" class="preset-load" data-action="loadPreset" data-index="{{@index}}"
+                    aria-label="{{localize 'BRUSH_PALETTE.PresetLoad'}}: {{this.name}}" title="{{localize 'BRUSH_PALETTE.PresetLoad'}}">
+              <span class="preset-swatch" style="background-color: {{this.strokeColor}}; border-color: {{this.fillColor}}"></span>
               <span class="preset-name">{{this.name}}</span>
               <span class="preset-info">{{this.strokeWidth}}px</span>
             </button>
-            <button type="button" class="preset-delete" data-action="deletePreset" data-index="{{@index}}" aria-label="{{localize 'BRUSH_PALETTE.PresetDelete'}}: {{this.name}}" title="{{localize 'BRUSH_PALETTE.PresetDelete'}}">
+            <button type="button" class="preset-delete" data-action="deletePreset" data-index="{{@index}}"
+                    aria-label="{{localize 'BRUSH_PALETTE.PresetDelete'}}: {{this.name}}" title="{{localize 'BRUSH_PALETTE.PresetDelete'}}">
               <i class="fas fa-times" aria-hidden="true"></i>
             </button>
           </div>
         {{/each}}
       </div>
       <div class="preset-save-row">
-        <input type="text" name="presetName" placeholder="{{localize "BRUSH_PALETTE.PresetNamePlaceholder"}}" class="preset-name-input" maxlength="30" aria-label="{{localize 'BRUSH_PALETTE.PresetNamePlaceholder'}}">
-        <button type="button" class="preset-save-btn" data-action="savePreset" aria-label="{{localize 'BRUSH_PALETTE.PresetSave'}}" title="{{localize 'BRUSH_PALETTE.PresetSave'}}">
+        <input type="text" name="presetName" placeholder="{{localize 'BRUSH_PALETTE.PresetNamePlaceholder'}}"
+               class="preset-name-input" maxlength="30" aria-label="{{localize 'BRUSH_PALETTE.PresetNamePlaceholder'}}">
+        <button type="button" class="preset-save-btn" data-action="savePreset"
+                aria-label="{{localize 'BRUSH_PALETTE.PresetSave'}}" title="{{localize 'BRUSH_PALETTE.PresetSave'}}">
           <i class="fas fa-save" aria-hidden="true"></i>
         </button>
       </div>
     </div>
+  </details>
+
+  <div class="form-footer">
+    <button type="button" data-action="resetBrush"><i class="fas fa-undo" aria-hidden="true"></i> {{localize "BRUSH_PALETTE.Reset"}}</button>
   </div>
-</form>
+
 </form>

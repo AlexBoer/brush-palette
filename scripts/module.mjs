@@ -4,7 +4,6 @@
  */
 
 import { BrushPalette } from "./BrushPalette.mjs";
-import { RibbonBrush, RIBBON_FLAG } from "./RibbonBrush.mjs";
 
 const MODULE_ID = "brush-palette";
 
@@ -18,6 +17,11 @@ const DEFAULT_BRUSH = {
   fillColor: "#ffffff",
   fillAlpha: 0.5,
   bezierFactor: 0,
+  text: "",
+  fontFamily: "",
+  fontSize: 48,
+  textColor: "#ffffff",
+  textAlpha: 1,
 };
 
 // Stroke style dash patterns (for advanced-drawing-tools compatibility)
@@ -27,21 +31,47 @@ const STROKE_DASH_PATTERNS = {
   dashed: [18, 3],
 };
 
-// Default swatches
-const DEFAULT_SWATCHES = [
-  "#000000",
-  "#ffffff",
-  "#ff0000",
-  "#ff8800",
-  "#ffff00",
-  "#00ff00",
-  "#00ffff",
-  "#0088ff",
-  "#0000ff",
-  "#8800ff",
-  "#ff00ff",
-  "#888888",
-];
+// Swatch color themes
+const SWATCH_THEMES = {
+  default: [
+    "#000000", "#ffffff", "#ff0000", "#ff8800", "#ffff00",
+    "#00ff00", "#00ffff", "#0088ff", "#0000ff", "#8800ff",
+    "#ff00ff", "#888888",
+  ],
+  pastel: [
+    "#ffb3ba", "#ffd1b3", "#ffffb3", "#b3ffb3", "#b3ffff",
+    "#b3d9ff", "#d9b3ff", "#ffb3ff", "#ffc9c9", "#c9ffc9",
+    "#c9c9ff", "#ffffff",
+  ],
+  muted: [
+    "#5c4a4a", "#7a6040", "#6a7a40", "#406a7a", "#4a406a",
+    "#7a4060", "#8d8d8d", "#c4a882", "#a3b899", "#8fa8c8",
+    "#c8a0a0", "#b0a0c8",
+  ],
+  neon: [
+    "#ff0040", "#ff8c00", "#fff700", "#00ff41", "#00ffff",
+    "#0080ff", "#8000ff", "#ff00ff", "#ff6600", "#00ff80",
+    "#ff0099", "#ffffff",
+  ],
+  monochrome: [
+    "#000000", "#1a1a1a", "#333333", "#4d4d4d", "#666666",
+    "#808080", "#999999", "#b3b3b3", "#cccccc", "#e6e6e6",
+    "#f2f2f2", "#ffffff",
+  ],
+  warm: [
+    "#3d0000", "#7a0000", "#c00000", "#e84040", "#e87020",
+    "#e8a020", "#e8c020", "#c8b400", "#a07830", "#805030",
+    "#603020", "#ffffff",
+  ],
+  cool: [
+    "#001a3d", "#003366", "#0055a0", "#0080d0", "#20a8e8",
+    "#50c8f0", "#80e0f8", "#a0f0ff", "#70d0c0", "#40b090",
+    "#206870", "#ffffff",
+  ],
+};
+
+// Default swatches (used for "custom" theme)
+const DEFAULT_SWATCHES = SWATCH_THEMES.default;
 
 // Default presets
 const DEFAULT_PRESETS = [
@@ -119,12 +149,6 @@ export let brush = { ...DEFAULT_BRUSH };
 // Palette instance
 let palette = null;
 
-// Track drawing tool state
-let _wasDrawingActive = false;
-
-// Guard flag: true while we are writing to the core drawing config ourselves
-let _selfUpdatingCoreConfig = false;
-
 // The core client setting key that stores default drawing data.
 // V13: "defaultDrawingConfig"  |  V14+: "drawingPalette"
 const _coreDrawingSettingKey = () =>
@@ -159,6 +183,26 @@ Hooks.once("init", () => {
     default: DEFAULT_SWATCHES,
   });
 
+  game.settings.register(MODULE_ID, "swatchTheme", {
+    name: "BRUSH_PALETTE.SwatchTheme",
+    hint: "BRUSH_PALETTE.SwatchThemeHint",
+    scope: "client",
+    config: true,
+    type: String,
+    choices: {
+      default:     "BRUSH_PALETTE.ThemeDefault",
+      pastel:      "BRUSH_PALETTE.ThemePastel",
+      muted:       "BRUSH_PALETTE.ThemeMuted",
+      neon:        "BRUSH_PALETTE.ThemeNeon",
+      monochrome:  "BRUSH_PALETTE.ThemeMonochrome",
+      warm:        "BRUSH_PALETTE.ThemeWarm",
+      cool:        "BRUSH_PALETTE.ThemeCool",
+      custom:      "BRUSH_PALETTE.ThemeCustom",
+    },
+    default: "default",
+    onChange: () => { if (palette?.rendered) palette.render(); },
+  });
+
   game.settings.register(MODULE_ID, "palettePosition", {
     name: "Palette Position",
     scope: "client",
@@ -177,66 +221,27 @@ Hooks.once("init", () => {
     restricted: false,
   });
 
-  // World-scoped toggle for experimental features (Ribbon Brush)
-  game.settings.register(MODULE_ID, "experimental", {
-    name: "BRUSH_PALETTE.Experimental",
-    hint: "BRUSH_PALETTE.ExperimentalHint",
-    scope: "world",
-    config: true,
-    type: Boolean,
-    default: false,
-    requiresReload: true,
-  });
-
-  // Register the Ribbon Brush drawing tool
-  RibbonBrush.register();
-
-  // Use the public preCreateDrawing hook to apply brush settings to new drawings
+  // Apply ADT dash/dot flags to new drawings - core fields are set via the
+  // Foundry drawing config setting and applied natively by DrawingsLayer.
   Hooks.on("preCreateDrawing", (document, data, options, userId) => {
-    // Skip ribbon brush drawings – they are pre-configured polygons
-    if (data?.flags?.[MODULE_ID]?.[RIBBON_FLAG]) return;
-
-    // Only apply brush settings when a built-in drawing tool is active.
+    // Only act when a built-in drawing tool is active.
     // This prevents overwriting styles set by other modules (e.g. Fate Aspect Tracker)
     // that create drawings programmatically.
     if (!_isBuiltInDrawingToolActive()) return;
-
-    // Ensure valid numeric values with safe defaults
-    const strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
-    const strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
-    let fillType = Number(brush.fillType) ?? 0;
-    const fillAlpha = Number(brush.fillAlpha) ?? 0.5;
-    const bezierFactor = Number(brush.bezierFactor) ?? 0;
-
-    // fillType 2 (pattern) requires a texture - fall back to solid if none
-    if (fillType === 2 && !data.texture) {
-      fillType = 1;
-    }
-
-    // Apply our brush palette settings with guaranteed valid values
-    const updateData = {
-      strokeColor: brush.strokeColor || "#000000",
-      strokeWidth: strokeWidth,
-      strokeAlpha: strokeAlpha,
-      fillType: fillType,
-      fillColor: brush.fillColor || "#ffffff",
-      fillAlpha: fillAlpha >= 0 ? fillAlpha : 0.5,
-      bezierFactor: bezierFactor >= 0 ? bezierFactor : 0,
-    };
 
     // Apply stroke style (dashed lines) via advanced-drawing-tools flags
     if (game.modules.get("advanced-drawing-tools")?.active) {
       const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
       if (dashPattern) {
-        updateData.flags = {
-          "advanced-drawing-tools": {
-            lineStyle: { dash: dashPattern },
+        document.updateSource({
+          flags: {
+            "advanced-drawing-tools": {
+              lineStyle: { dash: dashPattern },
+            },
           },
-        };
+        });
       }
     }
-
-    document.updateSource(updateData);
   });
 });
 
@@ -342,107 +347,40 @@ function _validateBrush() {
   brush.fillColor = brush.fillColor || "#ffffff";
   brush.bezierFactor = Number(brush.bezierFactor) ?? 0;
   brush.strokeStyle = brush.strokeStyle || "solid";
+  brush.text = brush.text ?? "";
+  brush.fontFamily = brush.fontFamily ?? "";
+  brush.fontSize = Math.max(8, Number(brush.fontSize) || 48);
+  brush.textColor = brush.textColor || "#ffffff";
+  brush.textAlpha = Number(brush.textAlpha) >= 0 ? Number(brush.textAlpha) : 1;
 }
 
 /**
- * Shared logic: show/hide the palette based on whether a drawing creation
- * tool is currently active.
+ * Close the palette when the user leaves the drawings layer.
  */
-function _syncPaletteVisibility() {
-  const isDrawingActive = _isDrawingToolActive();
-
-  if (isDrawingActive && !_wasDrawingActive) {
-    _showPalette();
-  } else if (!isDrawingActive && _wasDrawingActive) {
+Hooks.on("renderSceneControls", () => {
+  if (ui.controls?.control?.name !== "drawings" && palette?.rendered) {
     _hidePalette();
   }
-
-  _wasDrawingActive = isDrawingActive;
-}
-
-/**
- * Monitor scene controls to show/hide palette when switching layers.
- */
-Hooks.on("renderSceneControls", () => _syncPaletteVisibility());
-
-/**
- * Use the v13 SceneControls "activate" event to detect tool switches
- * within the same layer (e.g. select -> rect inside drawings).
- */
-Hooks.once("ready", () => {
-  ui.controls?.addEventListener("activate", () => _syncPaletteVisibility());
 });
 
 /**
- * Listen for external changes to the core drawing config (e.g. from
- * precise-drawing-tools' eyedropper colour picker) and sync them into the
- * brush palette so that our preCreateDrawing hook doesn't overwrite them.
- * The setting key changed from "defaultDrawingConfig" (V13) to "drawingPalette" (V14+).
+ * Add a toggle button to the drawings toolbar to open/close the palette.
  */
-Hooks.on("updateSetting", (setting) => {
-  // Only care about the core drawing defaults
-  if (setting.key !== `core.${_coreDrawingSettingKey()}`) return;
-
-  // Ignore changes we made ourselves
-  if (_selfUpdatingCoreConfig) return;
-
-  // Only act while the drawings layer is active
-  if (!_isDrawingToolActive()) return;
-
-  try {
-    const newConfig =
-      typeof setting.value === "string"
-        ? JSON.parse(setting.value)
-        : setting.value;
-    if (!newConfig || typeof newConfig !== "object") return;
-
-    let changed = false;
-
-    // Sync stroke properties
-    if (newConfig.strokeColor && newConfig.strokeColor !== brush.strokeColor) {
-      brush.strokeColor = newConfig.strokeColor;
-      changed = true;
-    }
-    if (
-      newConfig.strokeAlpha !== undefined &&
-      newConfig.strokeAlpha !== brush.strokeAlpha
-    ) {
-      brush.strokeAlpha = Math.max(0.05, Number(newConfig.strokeAlpha) || 1);
-      changed = true;
-    }
-
-    // Sync fill properties
-    if (newConfig.fillColor && newConfig.fillColor !== brush.fillColor) {
-      brush.fillColor = newConfig.fillColor;
-      changed = true;
-    }
-    if (
-      newConfig.fillAlpha !== undefined &&
-      newConfig.fillAlpha !== brush.fillAlpha
-    ) {
-      brush.fillAlpha = Math.max(0, Number(newConfig.fillAlpha) || 0);
-      changed = true;
-    }
-
-    if (changed) {
-      // Persist the updated brush so it survives reloads
-      saveBrushSettings();
-
-      // Re-render the palette UI so the new colours are visible
-      if (palette?.rendered) {
-        palette.render();
-      }
-
-      console.debug(
-        `${MODULE_ID} | Synced external drawing config change into brush palette`,
-      );
-    }
-  } catch (e) {
-    console.warn(
-      `${MODULE_ID} | Failed to sync external drawing config change:`,
-      e,
-    );
-  }
+Hooks.on("getSceneControlButtons", (controls) => {
+  const drawings = controls.drawings;
+  if (!drawings) return;
+  drawings.tools["brush-palette-toggle"] = {
+    name: "brush-palette-toggle",
+    title: "BRUSH_PALETTE.TogglePalette",
+    icon: "fas fa-palette",
+    toggle: true,
+    active: false,
+    order: 100,
+    onChange: (_event, active) => {
+      if (active) _showPalette(false);
+      else _hidePalette(false);
+    },
+  };
 });
 
 /**
@@ -450,11 +388,10 @@ Hooks.on("updateSetting", (setting) => {
  */
 Hooks.on("canvasTearDown", () => {
   _hidePalette();
-  _wasDrawingActive = false;
 });
 
 /**
- * Built-in Foundry drawing creation tools (plus our ribbon tool).
+ * Built-in Foundry drawing creation tools.
  * Used to limit brush-palette overrides to only user-initiated drawings.
  */
 const DRAWING_CREATION_TOOLS = new Set([
@@ -463,15 +400,14 @@ const DRAWING_CREATION_TOOLS = new Set([
   "rect",
   "ellipse",
   "text",
-  "ribbon",
 ]);
 
 /**
- * Check if a drawing creation tool is currently active.
- * Returns false when the drawings layer is active but only the select tool
- * is chosen (no palette needed in that case).
+ * Check if the user is actively using a built-in drawing creation tool.
+ * Returns false when another module (e.g. Fate Aspect Tracker) creates
+ * drawings programmatically, so we don't overwrite their styles.
  */
-function _isDrawingToolActive() {
+function _isBuiltInDrawingToolActive() {
   return (
     ui.controls?.control?.name === "drawings" &&
     DRAWING_CREATION_TOOLS.has(game.activeTool)
@@ -479,29 +415,38 @@ function _isDrawingToolActive() {
 }
 
 /**
- * Check if the user is actively using a built-in drawing creation tool.
- * Returns false when another module (e.g. Fate Aspect Tracker) creates
- * drawings programmatically, so we don't overwrite their styles.
- * @alias _isDrawingToolActive (same check)
+ * Show the palette window.
+ * @param {boolean} [syncToggle=true]  Update the toolbar toggle state.
  */
-const _isBuiltInDrawingToolActive = _isDrawingToolActive;
-
-/**
- * Show the palette window
- */
-function _showPalette() {
+function _showPalette(syncToggle = true) {
   if (!palette) {
     palette = new BrushPalette();
   }
   palette.render(true);
+  if (syncToggle) _setToggleActive(true);
 }
 
 /**
- * Hide the palette window
+ * Hide the palette window.
+ * @param {boolean} [syncToggle=true]  Update the toolbar toggle state.
  */
-function _hidePalette() {
+function _hidePalette(syncToggle = true) {
   if (palette?.rendered) {
     palette.close();
+  }
+  if (syncToggle) _setToggleActive(false);
+}
+
+/**
+ * Sync the toolbar toggle button active state.
+ * @param {boolean} active
+ */
+function _setToggleActive(active) {
+  const toggle =
+    ui.controls?.controls?.drawings?.tools?.["brush-palette-toggle"];
+  if (toggle && toggle.active !== active) {
+    toggle.active = active;
+    ui.controls?.render();
   }
 }
 
@@ -531,6 +476,17 @@ function _loadPersistedBrush() {
     brush.strokeStyle = brush.strokeStyle || "solid";
     brush.strokeColor = brush.strokeColor || DEFAULT_BRUSH.strokeColor;
     brush.fillColor = brush.fillColor || DEFAULT_BRUSH.fillColor;
+    brush.text = brush.text ?? "";
+    brush.fontFamily = brush.fontFamily ?? "";
+    brush.fontSize = Math.max(
+      8,
+      Number(brush.fontSize) || DEFAULT_BRUSH.fontSize,
+    );
+    brush.textColor = brush.textColor || DEFAULT_BRUSH.textColor;
+    brush.textAlpha = Math.max(
+      0,
+      Number(brush.textAlpha) ?? DEFAULT_BRUSH.textAlpha,
+    );
   }
 }
 
@@ -546,14 +502,12 @@ export function saveBrushSettings() {
 }
 
 /**
- * Update Foundry's core drawing config client storage with current brush settings.
- * V13: stores under "core.defaultDrawingConfig"
- * V14+: stores under "core.drawingPalette"
- * Writes directly to storage to avoid the registered-setting assertion.
+ * Update Foundry's core drawing config with current brush settings.
+ * V13: "core.defaultDrawingConfig"  |  V14+: "core.drawingPalette"
+ * Both versions register this as a proper client setting.
  */
 function _updateCoreDrawingConfig() {
   try {
-    // Use actual brush values so the drawing preview matches the final result.
     // fillType 2 (pattern) without a texture fails Foundry validation,
     // so fall back to solid (1) in that case.
     let fillType = Number(brush.fillType) ?? 0;
@@ -568,38 +522,15 @@ function _updateCoreDrawingConfig() {
       fillAlpha: Number(brush.fillAlpha) >= 0 ? Number(brush.fillAlpha) : 0.5,
       bezierFactor:
         Number(brush.bezierFactor) >= 0 ? Number(brush.bezierFactor) : 0,
+      text: brush.text || "",
+      fontFamily: brush.fontFamily || "",
+      fontSize: Math.max(8, Number(brush.fontSize) || 48),
+      textColor: brush.textColor || "#ffffff",
+      textAlpha: Number(brush.textAlpha) >= 0 ? Number(brush.textAlpha) : 1,
     };
 
-    // Include dash pattern flags so the live preview also renders
-    // dashed/dotted lines (advanced-drawing-tools reads these flags).
-    if (game.modules.get("advanced-drawing-tools")?.active) {
-      const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
-      if (dashPattern) {
-        config.flags = {
-          "advanced-drawing-tools": {
-            lineStyle: { dash: dashPattern },
-          },
-        };
-      } else {
-        // Explicitly clear any previous dash pattern
-        config.flags = {
-          "advanced-drawing-tools": {
-            lineStyle: { dash: null },
-          },
-        };
-      }
-    }
-
-    // Write directly to client storage instead of game.settings.set() to avoid
-    // the #assertSetting registration check. Foundry reads creation defaults
-    // from this same storage location. The key changed in V14+.
-    _selfUpdatingCoreConfig = true;
-    game.settings.storage
-      .get("client")
-      .setItem(`core.${_coreDrawingSettingKey()}`, JSON.stringify(config));
-    _selfUpdatingCoreConfig = false;
+    game.settings.set("core", _coreDrawingSettingKey(), config);
   } catch (e) {
-    _selfUpdatingCoreConfig = false;
     console.warn(`${MODULE_ID} | Could not update core drawing config:`, e);
   }
 }
@@ -619,10 +550,32 @@ export function savePresets(presets) {
 }
 
 /**
- * Get swatches
+ * Get swatches — returns the active theme's colors, or custom saved swatches.
  */
 export function getSwatches() {
-  return game.settings.get(MODULE_ID, "swatches") || DEFAULT_SWATCHES;
+  const theme = game.settings.get(MODULE_ID, "swatchTheme") ?? "default";
+  if (theme === "custom") {
+    return game.settings.get(MODULE_ID, "swatches") || DEFAULT_SWATCHES;
+  }
+  return SWATCH_THEMES[theme] ?? SWATCH_THEMES.default;
+}
+
+/**
+ * Update a single swatch color in the custom palette.
+ * Switches the theme to "custom" if not already.
+ */
+export async function saveSwatchColor(index, color) {
+  // If not on custom theme, copy current theme's swatches into custom first
+  const theme = game.settings.get(MODULE_ID, "swatchTheme") ?? "default";
+  let swatches;
+  if (theme !== "custom") {
+    swatches = [...(SWATCH_THEMES[theme] ?? SWATCH_THEMES.default)];
+    await game.settings.set(MODULE_ID, "swatchTheme", "custom");
+  } else {
+    swatches = [...(game.settings.get(MODULE_ID, "swatches") || DEFAULT_SWATCHES)];
+  }
+  swatches[index] = color;
+  await game.settings.set(MODULE_ID, "swatches", swatches);
 }
 
 /**
@@ -651,4 +604,12 @@ export function getPalette() {
  */
 export function getModuleId() {
   return MODULE_ID;
+}
+
+/**
+ * Reset brush to defaults
+ */
+export function resetBrush() {
+  Object.assign(brush, DEFAULT_BRUSH);
+  saveBrushSettings();
 }

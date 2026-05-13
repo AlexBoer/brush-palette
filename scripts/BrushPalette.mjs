@@ -10,6 +10,8 @@ import {
   getSwatches,
   getPalettePosition,
   savePalettePosition,
+  resetBrush,
+  saveSwatchColor,
 } from "./module.mjs";
 
 const MODULE_ID = "brush-palette";
@@ -18,7 +20,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "brush-palette",
-    classes: ["brush-palette-app"],
+    classes: ["brush-palette-app", "faded-ui"],
     tag: "div",
     window: {
       title: "BRUSH_PALETTE.Title",
@@ -27,16 +29,16 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
       minimizable: true,
     },
     position: {
-      width: 280,
+      width: 240,
       height: "auto",
     },
     actions: {
-      toggleSection: BrushPalette.#toggleSection,
       pickStrokeColor: BrushPalette.#pickStrokeColor,
       pickFillColor: BrushPalette.#pickFillColor,
       loadPreset: BrushPalette.#loadPreset,
       deletePreset: BrushPalette.#deletePreset,
       savePreset: BrushPalette.#savePreset,
+      resetBrush: BrushPalette.#resetBrush,
     },
   };
 
@@ -46,10 +48,11 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     },
   };
 
-  // Track expanded state for sections
+  // Track expanded state for sections (persisted across re-renders)
   _sectionState = {
     stroke: true,
     fill: true,
+    text: false,
     presets: false,
   };
 
@@ -64,6 +67,15 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     }));
 
     const presets = getPresets();
+
+    const fontChoices = FontConfig?.getAvailableFontChoices?.() ?? {};
+    const fontFamilies = Object.entries(fontChoices)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([value, label]) => ({
+        value,
+        label,
+        selected: value === brush.fontFamily,
+      }));
 
     return {
       strokeColor: brush.strokeColor,
@@ -80,11 +92,19 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
       fillAlphaPct: Math.round(brush.fillAlpha * 100),
       bezierFactor: brush.bezierFactor,
       bezierFactorPct: Math.round(brush.bezierFactor * 200), // 0-0.5 mapped to 0-100%
+      text: brush.text || "",
+      fontFamily: brush.fontFamily || "",
+      fontFamilies,
+      fontSize: brush.fontSize,
+      textColor: brush.textColor,
+      textAlpha: brush.textAlpha,
+      textAlphaPct: Math.round(brush.textAlpha * 100),
       adtActive: !!game.modules.get("advanced-drawing-tools")?.active,
       swatches,
       presets,
       strokeExpanded: this._sectionState.stroke,
       fillExpanded: this._sectionState.fill,
+      textExpanded: this._sectionState.text,
       presetsExpanded: this._sectionState.presets,
     };
   }
@@ -113,6 +133,22 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
+   * Sync the toolbar toggle button when the window is closed by the user.
+   */
+  async _onClose(options) {
+    await super._onClose(options);
+    // Defer so we don't interfere with the controls render cycle
+    setTimeout(() => {
+      const toggle =
+        ui.controls?.controls?.drawings?.tools?.["brush-palette-toggle"];
+      if (toggle?.active) {
+        toggle.active = false;
+        ui.controls?.render();
+      }
+    }, 0);
+  }
+
+  /**
    * One-time setup: event listeners that persist across re-renders
    */
   _onFirstRender(context, options) {
@@ -124,14 +160,19 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     html.addEventListener("input", this.#onInputChange.bind(this));
     html.addEventListener("change", this.#onInputChange.bind(this));
 
-    // Keyboard support for section headers (role="button")
-    html.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      const header = ev.target.closest('.section-header[role="button"]');
-      if (!header) return;
-      ev.preventDefault();
-      header.click();
-    });
+    // Right-click a swatch to edit its color (custom theme only)
+    html.addEventListener("contextmenu", this.#onSwatchRightClick.bind(this));
+
+    // Track <details> open/close state so sections stay open across re-renders.
+    // toggle events don't bubble, so use capture mode.
+    html.addEventListener(
+      "toggle",
+      (ev) => {
+        const section = ev.target.dataset?.section;
+        if (section !== undefined) this._sectionState[section] = ev.target.open;
+      },
+      true,
+    );
   }
 
   /**
@@ -184,10 +225,10 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
         break;
       case "fillEnabled":
         brush.fillType = input.checked ? 1 : 0;
+        const fillControls = this.element.querySelector(".fill-controls");
+        if (fillControls) fillControls.hidden = !input.checked;
         saveBrushSettings();
-        // Re-render to show/hide fill controls
-        this.render();
-        return; // Don't save again below
+        return;
       case "fillColor":
         brush.fillColor = value;
         this.#updateColorText("fillColorText", value);
@@ -211,6 +252,32 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
           `${Math.round(brush.bezierFactor * 200)}%`,
         );
         break;
+      case "text":
+        brush.text = value;
+        break;
+      case "fontFamily":
+        brush.fontFamily = value;
+        break;
+      case "fontSize":
+        brush.fontSize = Math.max(8, parseInt(value, 10) || 48);
+        this.#updateRangeValue(input, `${brush.fontSize}px`);
+        break;
+      case "textColor":
+        brush.textColor = value;
+        this.#updateColorText("textColorText", value);
+        break;
+      case "textColorText":
+        if (/^#[0-9a-f]{6}$/i.test(value)) {
+          brush.textColor = value;
+          this.element.querySelector('input[name="textColor"]').value = value;
+        }
+        break;
+      case "textAlpha":
+        brush.textAlpha = Math.max(0, parseFloat(value) || 0);
+        this.#updateRangeValue(input, `${Math.round(brush.textAlpha * 100)}%`);
+        break;
+      default:
+        return; // Unknown input (e.g. presetName) — don't trigger a save
     }
 
     // Save on every change
@@ -263,27 +330,6 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
         swatchColor?.toLowerCase() === color?.toLowerCase(),
       );
     });
-  }
-
-  /**
-   * Action: Toggle section expand/collapse
-   */
-  static #toggleSection(event, target) {
-    const section = target.dataset.section;
-    if (!section) return;
-
-    this._sectionState[section] = !this._sectionState[section];
-    const expanded = this._sectionState[section];
-
-    const container = this.element.querySelector(
-      `.collapsible[data-section="${section}"]`,
-    );
-    if (container) {
-      container.classList.toggle("expanded", expanded);
-    }
-
-    // Sync aria-expanded on the header
-    target.setAttribute("aria-expanded", String(expanded));
   }
 
   /**
@@ -374,6 +420,11 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     brush.fillAlpha = preset.fillAlpha ?? brush.fillAlpha;
     brush.bezierFactor = preset.bezierFactor ?? brush.bezierFactor;
     brush.strokeStyle = preset.strokeStyle ?? brush.strokeStyle;
+    brush.text = preset.text ?? brush.text;
+    brush.fontFamily = preset.fontFamily ?? brush.fontFamily;
+    brush.fontSize = preset.fontSize ?? brush.fontSize;
+    brush.textColor = preset.textColor ?? brush.textColor;
+    brush.textAlpha = preset.textAlpha ?? brush.textAlpha;
 
     saveBrushSettings();
 
@@ -413,6 +464,11 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
       fillColor: brush.fillColor,
       fillAlpha: brush.fillAlpha,
       bezierFactor: brush.bezierFactor,
+      text: brush.text,
+      fontFamily: brush.fontFamily,
+      fontSize: brush.fontSize,
+      textColor: brush.textColor,
+      textAlpha: brush.textAlpha,
     };
 
     const presets = getPresets();
@@ -422,5 +478,54 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     // Clear input and re-render
     if (nameInput) nameInput.value = "";
     this.render();
+  }
+
+  /**
+   * Action: Reset brush to defaults
+   */
+  static #resetBrush() {
+    resetBrush();
+    this.render();
+  }
+
+  /**
+   * Right-click a swatch to edit its color (only when theme is "custom").
+   */
+  #onSwatchRightClick(event) {
+    const swatch = event.target.closest(".swatch");
+    if (!swatch) return;
+
+    const theme = game.settings.get("brush-palette", "swatchTheme");
+    if (theme !== "custom") {
+      ui.notifications.info(
+        game.i18n.localize("BRUSH_PALETTE.SwatchEditCustomOnly"),
+      );
+      return;
+    }
+
+    event.preventDefault();
+
+    const index = parseInt(swatch.dataset.index, 10);
+    if (isNaN(index)) return;
+
+    // Create a temporary off-screen color input and trigger it
+    const picker = document.createElement("input");
+    picker.type = "color";
+    picker.value = swatch.dataset.color || "#000000";
+    picker.style.cssText = "position:fixed;opacity:0;pointer-events:none;";
+    document.body.appendChild(picker);
+
+    picker.addEventListener("change", async () => {
+      const newColor = picker.value;
+      document.body.removeChild(picker);
+      await saveSwatchColor(index, newColor);
+      this.render();
+    });
+
+    picker.addEventListener("cancel", () => {
+      document.body.removeChild(picker);
+    });
+
+    picker.click();
   }
 }

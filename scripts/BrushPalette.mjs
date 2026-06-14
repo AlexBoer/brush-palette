@@ -12,6 +12,7 @@ import {
   savePalettePosition,
   resetBrush,
   saveSwatchColor,
+  getSelectedDrawing,
 } from "./module.mjs";
 
 const MODULE_ID = "brush-palette";
@@ -68,7 +69,9 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const presets = getPresets();
 
-    const fontChoices = FontConfig?.getAvailableFontChoices?.() ?? {};
+    const FontCfg =
+      foundry.applications.settings?.menus?.FontConfig ?? FontConfig;
+    const fontChoices = FontCfg?.getAvailableFontChoices?.() ?? {};
     const fontFamilies = Object.entries(fontChoices)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([value, label]) => ({
@@ -106,6 +109,7 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
       fillExpanded: this._sectionState.fill,
       textExpanded: this._sectionState.text,
       presetsExpanded: this._sectionState.presets,
+      editingDrawing: !!getSelectedDrawing(),
     };
   }
 

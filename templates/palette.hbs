@@ -1,5 +1,13 @@
 ﻿<form class="standard-form" autocomplete="off">
 
+  {{!-- Editing-drawing notice --}}
+  {{#if editingDrawing}}
+  <div class="editing-drawing-notice">
+    <i class="fas fa-pen-to-square" aria-hidden="true"></i>
+    {{localize "BRUSH_PALETTE.EditingDrawing"}}
+  </div>
+  {{/if}}
+
   {{!-- Lines Section --}}
   <details data-section="stroke" {{#if strokeExpanded}}open{{/if}}>
     <summary>

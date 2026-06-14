@@ -310,6 +310,21 @@
   cursor: pointer;
 }
 
+/* ── Editing-drawing notice ──────────────────────────────── */
+#brush-palette .editing-drawing-notice {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78em;
+  font-style: italic;
+  color: var(--color-border-highlight, #f05500);
+  background: color-mix(in srgb, var(--color-border-highlight, #f05500) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border-highlight, #f05500) 35%, transparent);
+  border-radius: 3px;
+  padding: 3px 6px;
+  margin-bottom: 4px;
+}
+
 /* ── Reset footer ────────────────────────────────────────── */
 #brush-palette .form-footer {
   margin-top: 6px;

@@ -34,39 +34,102 @@ const STROKE_DASH_PATTERNS = {
 // Swatch color themes
 const SWATCH_THEMES = {
   default: [
-    "#000000", "#ffffff", "#ff0000", "#ff8800", "#ffff00",
-    "#00ff00", "#00ffff", "#0088ff", "#0000ff", "#8800ff",
-    "#ff00ff", "#888888",
+    "#000000",
+    "#ffffff",
+    "#ff0000",
+    "#ff8800",
+    "#ffff00",
+    "#00ff00",
+    "#00ffff",
+    "#0088ff",
+    "#0000ff",
+    "#8800ff",
+    "#ff00ff",
+    "#888888",
   ],
   pastel: [
-    "#ffb3ba", "#ffd1b3", "#ffffb3", "#b3ffb3", "#b3ffff",
-    "#b3d9ff", "#d9b3ff", "#ffb3ff", "#ffc9c9", "#c9ffc9",
-    "#c9c9ff", "#ffffff",
+    "#ffb3ba",
+    "#ffd1b3",
+    "#ffffb3",
+    "#b3ffb3",
+    "#b3ffff",
+    "#b3d9ff",
+    "#d9b3ff",
+    "#ffb3ff",
+    "#ffc9c9",
+    "#c9ffc9",
+    "#c9c9ff",
+    "#ffffff",
   ],
   muted: [
-    "#5c4a4a", "#7a6040", "#6a7a40", "#406a7a", "#4a406a",
-    "#7a4060", "#8d8d8d", "#c4a882", "#a3b899", "#8fa8c8",
-    "#c8a0a0", "#b0a0c8",
+    "#5c4a4a",
+    "#7a6040",
+    "#6a7a40",
+    "#406a7a",
+    "#4a406a",
+    "#7a4060",
+    "#8d8d8d",
+    "#c4a882",
+    "#a3b899",
+    "#8fa8c8",
+    "#c8a0a0",
+    "#b0a0c8",
   ],
   neon: [
-    "#ff0040", "#ff8c00", "#fff700", "#00ff41", "#00ffff",
-    "#0080ff", "#8000ff", "#ff00ff", "#ff6600", "#00ff80",
-    "#ff0099", "#ffffff",
+    "#ff0040",
+    "#ff8c00",
+    "#fff700",
+    "#00ff41",
+    "#00ffff",
+    "#0080ff",
+    "#8000ff",
+    "#ff00ff",
+    "#ff6600",
+    "#00ff80",
+    "#ff0099",
+    "#ffffff",
   ],
   monochrome: [
-    "#000000", "#1a1a1a", "#333333", "#4d4d4d", "#666666",
-    "#808080", "#999999", "#b3b3b3", "#cccccc", "#e6e6e6",
-    "#f2f2f2", "#ffffff",
+    "#000000",
+    "#1a1a1a",
+    "#333333",
+    "#4d4d4d",
+    "#666666",
+    "#808080",
+    "#999999",
+    "#b3b3b3",
+    "#cccccc",
+    "#e6e6e6",
+    "#f2f2f2",
+    "#ffffff",
   ],
   warm: [
-    "#3d0000", "#7a0000", "#c00000", "#e84040", "#e87020",
-    "#e8a020", "#e8c020", "#c8b400", "#a07830", "#805030",
-    "#603020", "#ffffff",
+    "#3d0000",
+    "#7a0000",
+    "#c00000",
+    "#e84040",
+    "#e87020",
+    "#e8a020",
+    "#e8c020",
+    "#c8b400",
+    "#a07830",
+    "#805030",
+    "#603020",
+    "#ffffff",
   ],
   cool: [
-    "#001a3d", "#003366", "#0055a0", "#0080d0", "#20a8e8",
-    "#50c8f0", "#80e0f8", "#a0f0ff", "#70d0c0", "#40b090",
-    "#206870", "#ffffff",
+    "#001a3d",
+    "#003366",
+    "#0055a0",
+    "#0080d0",
+    "#20a8e8",
+    "#50c8f0",
+    "#80e0f8",
+    "#a0f0ff",
+    "#70d0c0",
+    "#40b090",
+    "#206870",
+    "#ffffff",
   ],
 };
 
@@ -149,6 +212,12 @@ export let brush = { ...DEFAULT_BRUSH };
 // Palette instance
 let palette = null;
 
+// The drawing currently being edited via the palette (null = none)
+let _selectedDrawing = null;
+
+// Brush state saved just before a drawing was selected
+let _preSelectionBrush = null;
+
 // The core client setting key that stores default drawing data.
 // V13: "defaultDrawingConfig"  |  V14+: "drawingPalette"
 const _coreDrawingSettingKey = () =>
@@ -190,17 +259,19 @@ Hooks.once("init", () => {
     config: true,
     type: String,
     choices: {
-      default:     "BRUSH_PALETTE.ThemeDefault",
-      pastel:      "BRUSH_PALETTE.ThemePastel",
-      muted:       "BRUSH_PALETTE.ThemeMuted",
-      neon:        "BRUSH_PALETTE.ThemeNeon",
-      monochrome:  "BRUSH_PALETTE.ThemeMonochrome",
-      warm:        "BRUSH_PALETTE.ThemeWarm",
-      cool:        "BRUSH_PALETTE.ThemeCool",
-      custom:      "BRUSH_PALETTE.ThemeCustom",
+      default: "BRUSH_PALETTE.ThemeDefault",
+      pastel: "BRUSH_PALETTE.ThemePastel",
+      muted: "BRUSH_PALETTE.ThemeMuted",
+      neon: "BRUSH_PALETTE.ThemeNeon",
+      monochrome: "BRUSH_PALETTE.ThemeMonochrome",
+      warm: "BRUSH_PALETTE.ThemeWarm",
+      cool: "BRUSH_PALETTE.ThemeCool",
+      custom: "BRUSH_PALETTE.ThemeCustom",
     },
     default: "default",
-    onChange: () => { if (palette?.rendered) palette.render(); },
+    onChange: () => {
+      if (palette?.rendered) palette.render();
+    },
   });
 
   game.settings.register(MODULE_ID, "palettePosition", {
@@ -391,6 +462,34 @@ Hooks.on("canvasTearDown", () => {
 });
 
 /**
+ * When a drawing is controlled (selected) or released, sync the palette.
+ * - Single drawing selected → show its properties in the palette.
+ * - Drawing deselected (or multiple selected) → restore the pre-selection brush.
+ */
+Hooks.on("controlDrawing", (_drawing, _controlled) => {
+  const nowControlled = canvas.drawings?.controlled ?? [];
+
+  if (nowControlled.length === 1) {
+    const single = nowControlled[0];
+    // Backup the brush the first time we enter selection mode
+    if (!_selectedDrawing) {
+      _preSelectionBrush = { ...brush };
+    }
+    _selectedDrawing = single;
+    _loadDrawingIntoBrush(single);
+  } else {
+    // Nothing selected (or multi-select) — restore original brush
+    if (_preSelectionBrush) {
+      Object.assign(brush, _preSelectionBrush);
+      _preSelectionBrush = null;
+    }
+    _selectedDrawing = null;
+  }
+
+  if (palette?.rendered) palette.render();
+});
+
+/**
  * Built-in Foundry drawing creation tools.
  * Used to limit brush-palette overrides to only user-initiated drawings.
  */
@@ -491,9 +590,16 @@ function _loadPersistedBrush() {
 }
 
 /**
- * Save current brush settings
+ * Save current brush settings (or apply to selected drawing if one is active).
  */
 export function saveBrushSettings() {
+  if (_selectedDrawing) {
+    // Apply changes directly to the selected drawing; don't overwrite the
+    // saved brush defaults while we're in "drawing edit" mode.
+    _applyBrushToSelectedDrawing();
+    return;
+  }
+
   game.settings.set(MODULE_ID, "lastBrush", { ...brush });
 
   // Also update Foundry's core drawing config so new drawings pick up our settings.
@@ -572,7 +678,9 @@ export async function saveSwatchColor(index, color) {
     swatches = [...(SWATCH_THEMES[theme] ?? SWATCH_THEMES.default)];
     await game.settings.set(MODULE_ID, "swatchTheme", "custom");
   } else {
-    swatches = [...(game.settings.get(MODULE_ID, "swatches") || DEFAULT_SWATCHES)];
+    swatches = [
+      ...(game.settings.get(MODULE_ID, "swatches") || DEFAULT_SWATCHES),
+    ];
   }
   swatches[index] = color;
   await game.settings.set(MODULE_ID, "swatches", swatches);
@@ -604,6 +712,101 @@ export function getPalette() {
  */
 export function getModuleId() {
   return MODULE_ID;
+}
+
+/**
+ * Get the currently selected (controlled) drawing being edited, or null.
+ */
+export function getSelectedDrawing() {
+  return _selectedDrawing;
+}
+
+/**
+ * Coerce a value that may be a Foundry Color object, a number, or a string
+ * into a lowercase CSS hex string ("#rrggbb"), falling back to `fallback`.
+ */
+function _toHexString(value, fallback) {
+  if (!value && value !== 0) return fallback;
+  // Foundry Color objects have a .toString() that yields "#rrggbb"
+  const s = String(value);
+  if (/^#[0-9a-f]{6}$/i.test(s)) return s.toLowerCase();
+  // Numeric color (e.g. 0xff0000)
+  if (typeof value === "number") {
+    return `#${value.toString(16).padStart(6, "0")}`;
+  }
+  return fallback;
+}
+
+/**
+ * Load a drawing's stored properties into the shared brush object.
+ */
+function _loadDrawingIntoBrush(drawing) {
+  const doc = drawing.document;
+  brush.strokeColor = _toHexString(doc.strokeColor, DEFAULT_BRUSH.strokeColor);
+  brush.strokeWidth = doc.strokeWidth ?? DEFAULT_BRUSH.strokeWidth;
+  brush.strokeAlpha = doc.strokeAlpha ?? DEFAULT_BRUSH.strokeAlpha;
+  brush.fillType = doc.fillType ?? DEFAULT_BRUSH.fillType;
+  brush.fillColor = _toHexString(doc.fillColor, DEFAULT_BRUSH.fillColor);
+  brush.fillAlpha = doc.fillAlpha ?? DEFAULT_BRUSH.fillAlpha;
+  brush.bezierFactor = doc.bezierFactor ?? DEFAULT_BRUSH.bezierFactor;
+  brush.text = doc.text ?? DEFAULT_BRUSH.text;
+  brush.fontFamily = doc.fontFamily || DEFAULT_BRUSH.fontFamily;
+  brush.fontSize = doc.fontSize ?? DEFAULT_BRUSH.fontSize;
+  brush.textColor = _toHexString(doc.textColor, DEFAULT_BRUSH.textColor);
+  brush.textAlpha = doc.textAlpha ?? DEFAULT_BRUSH.textAlpha;
+
+  // Map ADT dash-pattern flags back to a stroke style name
+  if (game.modules.get("advanced-drawing-tools")?.active) {
+    const adtDash = doc.flags?.["advanced-drawing-tools"]?.lineStyle?.dash;
+    if (!adtDash || adtDash.length === 0) {
+      brush.strokeStyle = "solid";
+    } else if (
+      adtDash[0] === STROKE_DASH_PATTERNS.dotted[0] &&
+      adtDash[1] === STROKE_DASH_PATTERNS.dotted[1]
+    ) {
+      brush.strokeStyle = "dotted";
+    } else if (
+      adtDash[0] === STROKE_DASH_PATTERNS.dashed[0] &&
+      adtDash[1] === STROKE_DASH_PATTERNS.dashed[1]
+    ) {
+      brush.strokeStyle = "dashed";
+    } else {
+      brush.strokeStyle = "solid";
+    }
+  }
+}
+
+/**
+ * Apply the current brush settings to the selected drawing document.
+ */
+function _applyBrushToSelectedDrawing() {
+  if (!_selectedDrawing?.document) return;
+
+  const updates = {
+    strokeColor: brush.strokeColor,
+    strokeWidth: brush.strokeWidth,
+    strokeAlpha: brush.strokeAlpha,
+    fillType: brush.fillType,
+    fillColor: brush.fillColor,
+    fillAlpha: brush.fillAlpha,
+    bezierFactor: brush.bezierFactor,
+    text: brush.text,
+    fontFamily: brush.fontFamily,
+    fontSize: brush.fontSize,
+    textColor: brush.textColor,
+    textAlpha: brush.textAlpha,
+  };
+
+  if (game.modules.get("advanced-drawing-tools")?.active) {
+    const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
+    updates["flags.advanced-drawing-tools.lineStyle.dash"] = dashPattern;
+  }
+
+  _selectedDrawing.document
+    .update(updates)
+    .catch((err) =>
+      console.warn(`${MODULE_ID} | Failed to update drawing:`, err),
+    );
 }
 
 /**

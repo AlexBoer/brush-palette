@@ -454,7 +454,9 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     const nameInput = this.element.querySelector('input[name="presetName"]');
     const name = nameInput?.value?.trim();
     if (!name) {
-      ui.notifications.warn("Please enter a preset name");
+      ui.notifications.warn(
+        game.i18n.localize("BRUSH_PALETTE.WarnNoPresetName"),
+      );
       return;
     }
 

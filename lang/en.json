@@ -52,5 +52,6 @@
   "BRUSH_PALETTE.ThemeCool": "Cool",
   "BRUSH_PALETTE.ThemeCustom": "Custom",
   "BRUSH_PALETTE.SwatchEditCustomOnly": "Switch the swatch theme to 'Custom' to edit individual swatches.",
-  "BRUSH_PALETTE.EditingDrawing": "Editing selected drawing"
+  "BRUSH_PALETTE.EditingDrawing": "Editing selected drawing",
+  "BRUSH_PALETTE.WarnNoPresetName": "Please enter a preset name"
 }

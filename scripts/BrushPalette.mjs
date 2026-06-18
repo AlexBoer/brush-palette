@@ -30,7 +30,7 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
       minimizable: true,
     },
     position: {
-      width: 240,
+      width: 252,
       height: "auto",
     },
     actions: {
@@ -190,6 +190,8 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     if (savedPos && this.#isPositionInViewport(savedPos)) {
       this.setPosition({ left: savedPos.left, top: savedPos.top });
     }
+
+    this.#autoGrowTextarea(this.element.querySelector('textarea[name="text"]'));
   }
 
   /**
@@ -199,55 +201,64 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     const input = event.target;
     const name = input.name;
     let value = input.value;
+    let changedField = null;
 
     switch (name) {
       case "strokeColor":
         brush.strokeColor = value;
         this.#updateColorText("strokeColorText", value);
         this.#updateSwatchActive(value);
+        changedField = "strokeColor";
         break;
       case "strokeColorText":
         if (/^#[0-9a-f]{6}$/i.test(value)) {
           brush.strokeColor = value;
           this.element.querySelector('input[name="strokeColor"]').value = value;
           this.#updateSwatchActive(value);
+          changedField = "strokeColor";
         }
         break;
       case "strokeWidth":
-        brush.strokeWidth = Math.max(0, parseInt(value, 10) || 1);
+        brush.strokeWidth = Math.max(0, parseInt(value, 10) || 0);
         this.#updateRangeValue(input, `${brush.strokeWidth}px`);
+        changedField = "strokeWidth";
         break;
       case "strokeAlpha":
-        brush.strokeAlpha = Math.max(0.05, parseFloat(value) || 0.05);
+        brush.strokeAlpha = Math.max(0, parseFloat(value) || 0);
         this.#updateRangeValue(
           input,
           `${Math.round(brush.strokeAlpha * 100)}%`,
         );
+        changedField = "strokeAlpha";
         break;
       case "strokeStyle":
         brush.strokeStyle = value;
+        changedField = "strokeStyle";
         break;
       case "fillEnabled":
         brush.fillType = input.checked ? 1 : 0;
         const fillControls = this.element.querySelector(".fill-controls");
         if (fillControls) fillControls.hidden = !input.checked;
-        saveBrushSettings();
-        return;
+        changedField = "fillType";
+        break;
       case "fillColor":
         brush.fillColor = value;
         this.#updateColorText("fillColorText", value);
         this.#updateFillSwatchActive(value);
+        changedField = "fillColor";
         break;
       case "fillColorText":
         if (/^#[0-9a-f]{6}$/i.test(value)) {
           brush.fillColor = value;
           this.element.querySelector('input[name="fillColor"]').value = value;
           this.#updateFillSwatchActive(value);
+          changedField = "fillColor";
         }
         break;
       case "fillAlpha":
         brush.fillAlpha = Math.max(0, parseFloat(value) || 0);
         this.#updateRangeValue(input, `${Math.round(brush.fillAlpha * 100)}%`);
+        changedField = "fillAlpha";
         break;
       case "bezierFactor":
         brush.bezierFactor = Math.max(0, parseFloat(value) || 0);
@@ -255,37 +266,54 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
           input,
           `${Math.round(brush.bezierFactor * 200)}%`,
         );
+        changedField = "bezierFactor";
         break;
       case "text":
         brush.text = value;
+        this.#autoGrowTextarea(input);
+        changedField = "text";
         break;
       case "fontFamily":
         brush.fontFamily = value;
+        changedField = "fontFamily";
         break;
       case "fontSize":
         brush.fontSize = Math.max(8, parseInt(value, 10) || 48);
         this.#updateRangeValue(input, `${brush.fontSize}px`);
+        changedField = "fontSize";
         break;
       case "textColor":
         brush.textColor = value;
         this.#updateColorText("textColorText", value);
+        changedField = "textColor";
         break;
       case "textColorText":
         if (/^#[0-9a-f]{6}$/i.test(value)) {
           brush.textColor = value;
           this.element.querySelector('input[name="textColor"]').value = value;
+          changedField = "textColor";
         }
         break;
       case "textAlpha":
         brush.textAlpha = Math.max(0, parseFloat(value) || 0);
         this.#updateRangeValue(input, `${Math.round(brush.textAlpha * 100)}%`);
+        changedField = "textAlpha";
         break;
       default:
         return; // Unknown input (e.g. presetName) — don't trigger a save
     }
 
     // Save on every change
-    saveBrushSettings();
+    if (changedField) saveBrushSettings(changedField);
+  }
+
+  /**
+   * Resize the textarea to fit its content without scrollbars.
+   */
+  #autoGrowTextarea(textarea) {
+    if (!(textarea instanceof HTMLTextAreaElement)) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
   }
 
   /**
@@ -344,7 +372,7 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!color) return;
 
     brush.strokeColor = color;
-    saveBrushSettings();
+    saveBrushSettings("strokeColor");
 
     // Update UI
     const colorInput = this.element.querySelector('input[name="strokeColor"]');
@@ -380,7 +408,7 @@ export class BrushPalette extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!color) return;
 
     brush.fillColor = color;
-    saveBrushSettings();
+    saveBrushSettings("fillColor");
 
     // Update UI
     const colorInput = this.element.querySelector('input[name="fillColor"]');

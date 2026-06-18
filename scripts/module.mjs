@@ -215,6 +215,12 @@ let palette = null;
 // The drawing currently being edited via the palette (null = none)
 let _selectedDrawing = null;
 
+// Snapshot of palette-managed fields when selection mode begins.
+let _selectedDrawingBaseline = null;
+
+// Palette-managed fields changed by the user while editing a drawing.
+let _selectedDrawingTouchedFields = new Set();
+
 // Brush state saved just before a drawing was selected
 let _preSelectionBrush = null;
 
@@ -410,19 +416,52 @@ Hooks.on("canvasReady", () => {
  * Ensure brush values are valid (won't cause validation errors)
  */
 function _validateBrush() {
-  brush.strokeWidth = Math.max(1, Number(brush.strokeWidth) || 8);
-  brush.strokeAlpha = Math.max(0.1, Number(brush.strokeAlpha) || 1);
+  brush.strokeWidth = _coerceNumber(
+    brush.strokeWidth,
+    DEFAULT_BRUSH.strokeWidth,
+    {
+      min: 0,
+    },
+  );
+  brush.strokeAlpha = _coerceNumber(
+    brush.strokeAlpha,
+    DEFAULT_BRUSH.strokeAlpha,
+    {
+      min: 0,
+    },
+  );
   brush.strokeColor = brush.strokeColor || "#000000";
-  brush.fillType = Number(brush.fillType) ?? 0;
-  brush.fillAlpha = Number(brush.fillAlpha) ?? 0.5;
+  brush.fillType = _coerceNumber(brush.fillType, DEFAULT_BRUSH.fillType, {
+    min: 0,
+  });
+  brush.fillAlpha = _coerceNumber(brush.fillAlpha, DEFAULT_BRUSH.fillAlpha, {
+    min: 0,
+  });
   brush.fillColor = brush.fillColor || "#ffffff";
-  brush.bezierFactor = Number(brush.bezierFactor) ?? 0;
+  brush.bezierFactor = _coerceNumber(
+    brush.bezierFactor,
+    DEFAULT_BRUSH.bezierFactor,
+    { min: 0 },
+  );
   brush.strokeStyle = brush.strokeStyle || "solid";
-  brush.text = brush.text ?? "";
-  brush.fontFamily = brush.fontFamily ?? "";
-  brush.fontSize = Math.max(8, Number(brush.fontSize) || 48);
-  brush.textColor = brush.textColor || "#ffffff";
-  brush.textAlpha = Number(brush.textAlpha) >= 0 ? Number(brush.textAlpha) : 1;
+  brush.text = brush.text ?? DEFAULT_BRUSH.text;
+  brush.fontFamily = brush.fontFamily ?? DEFAULT_BRUSH.fontFamily;
+  brush.fontSize = _coerceNumber(brush.fontSize, DEFAULT_BRUSH.fontSize, {
+    min: 8,
+  });
+  brush.textColor = brush.textColor || DEFAULT_BRUSH.textColor;
+  brush.textAlpha = _coerceNumber(brush.textAlpha, DEFAULT_BRUSH.textAlpha, {
+    min: 0,
+  });
+}
+
+/**
+ * Coerce a value to a finite number while preserving valid zeroes.
+ */
+function _coerceNumber(value, fallback, { min = -Infinity } = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, number);
 }
 
 /**
@@ -475,8 +514,12 @@ Hooks.on("controlDrawing", (_drawing, _controlled) => {
     if (!_selectedDrawing) {
       _preSelectionBrush = { ...brush };
     }
-    _selectedDrawing = single;
-    _loadDrawingIntoBrush(single);
+    if (_selectedDrawing?.id !== single.id) {
+      _selectedDrawing = single;
+      _selectedDrawingBaseline = _getDrawingManagedState(single.document);
+      _selectedDrawingTouchedFields = new Set();
+      _loadDrawingIntoBrush(single);
+    }
   } else {
     // Nothing selected (or multi-select) — restore original brush
     if (_preSelectionBrush) {
@@ -484,6 +527,8 @@ Hooks.on("controlDrawing", (_drawing, _controlled) => {
       _preSelectionBrush = null;
     }
     _selectedDrawing = null;
+    _selectedDrawingBaseline = null;
+    _selectedDrawingTouchedFields = new Set();
   }
 
   if (palette?.rendered) palette.render();
@@ -556,46 +601,18 @@ function _loadPersistedBrush() {
   const saved = game.settings.get(MODULE_ID, "lastBrush");
   if (saved) {
     Object.assign(brush, saved);
-
-    // Validate brush - ensure all values are valid and can create valid drawings
-    brush.strokeWidth = Math.max(
-      1,
-      Number(brush.strokeWidth) || DEFAULT_BRUSH.strokeWidth,
-    );
-    brush.strokeAlpha = Math.max(
-      0.05,
-      Number(brush.strokeAlpha) || DEFAULT_BRUSH.strokeAlpha,
-    );
-    brush.fillType = Number(brush.fillType) || 0;
-    brush.fillAlpha = Math.max(
-      0,
-      Number(brush.fillAlpha) || DEFAULT_BRUSH.fillAlpha,
-    );
-    brush.bezierFactor = Math.max(0, Number(brush.bezierFactor) || 0);
-    brush.strokeStyle = brush.strokeStyle || "solid";
-    brush.strokeColor = brush.strokeColor || DEFAULT_BRUSH.strokeColor;
-    brush.fillColor = brush.fillColor || DEFAULT_BRUSH.fillColor;
-    brush.text = brush.text ?? "";
-    brush.fontFamily = brush.fontFamily ?? "";
-    brush.fontSize = Math.max(
-      8,
-      Number(brush.fontSize) || DEFAULT_BRUSH.fontSize,
-    );
-    brush.textColor = brush.textColor || DEFAULT_BRUSH.textColor;
-    brush.textAlpha = Math.max(
-      0,
-      Number(brush.textAlpha) ?? DEFAULT_BRUSH.textAlpha,
-    );
+    _validateBrush();
   }
 }
 
 /**
  * Save current brush settings (or apply to selected drawing if one is active).
  */
-export function saveBrushSettings() {
+export function saveBrushSettings(changedFields = null) {
   if (_selectedDrawing) {
     // Apply changes directly to the selected drawing; don't overwrite the
     // saved brush defaults while we're in "drawing edit" mode.
+    _syncSelectedDrawingTouchedFields(changedFields);
     _applyBrushToSelectedDrawing();
     return;
   }
@@ -616,23 +633,38 @@ function _updateCoreDrawingConfig() {
   try {
     // fillType 2 (pattern) without a texture fails Foundry validation,
     // so fall back to solid (1) in that case.
-    let fillType = Number(brush.fillType) ?? 0;
+    let fillType = _coerceNumber(brush.fillType, DEFAULT_BRUSH.fillType, {
+      min: 0,
+    });
     if (fillType === 2) fillType = 1;
 
     const config = {
       strokeColor: brush.strokeColor || "#000000",
-      strokeWidth: Math.max(1, brush.strokeWidth || 8),
-      strokeAlpha: Math.max(0.1, Number(brush.strokeAlpha) || 1),
+      strokeWidth: _coerceNumber(brush.strokeWidth, DEFAULT_BRUSH.strokeWidth, {
+        min: 0,
+      }),
+      strokeAlpha: _coerceNumber(brush.strokeAlpha, DEFAULT_BRUSH.strokeAlpha, {
+        min: 0,
+      }),
       fillType: fillType,
       fillColor: brush.fillColor || "#ffffff",
-      fillAlpha: Number(brush.fillAlpha) >= 0 ? Number(brush.fillAlpha) : 0.5,
-      bezierFactor:
-        Number(brush.bezierFactor) >= 0 ? Number(brush.bezierFactor) : 0,
+      fillAlpha: _coerceNumber(brush.fillAlpha, DEFAULT_BRUSH.fillAlpha, {
+        min: 0,
+      }),
+      bezierFactor: _coerceNumber(
+        brush.bezierFactor,
+        DEFAULT_BRUSH.bezierFactor,
+        { min: 0 },
+      ),
       text: brush.text || "",
       fontFamily: brush.fontFamily || "",
-      fontSize: Math.max(8, Number(brush.fontSize) || 48),
+      fontSize: _coerceNumber(brush.fontSize, DEFAULT_BRUSH.fontSize, {
+        min: 8,
+      }),
       textColor: brush.textColor || "#ffffff",
-      textAlpha: Number(brush.textAlpha) >= 0 ? Number(brush.textAlpha) : 1,
+      textAlpha: _coerceNumber(brush.textAlpha, DEFAULT_BRUSH.textAlpha, {
+        min: 0,
+      }),
     };
 
     game.settings.set("core", _coreDrawingSettingKey(), config);
@@ -741,37 +773,125 @@ function _toHexString(value, fallback) {
  * Load a drawing's stored properties into the shared brush object.
  */
 function _loadDrawingIntoBrush(drawing) {
-  const doc = drawing.document;
-  brush.strokeColor = _toHexString(doc.strokeColor, DEFAULT_BRUSH.strokeColor);
-  brush.strokeWidth = doc.strokeWidth ?? DEFAULT_BRUSH.strokeWidth;
-  brush.strokeAlpha = doc.strokeAlpha ?? DEFAULT_BRUSH.strokeAlpha;
-  brush.fillType = doc.fillType ?? DEFAULT_BRUSH.fillType;
-  brush.fillColor = _toHexString(doc.fillColor, DEFAULT_BRUSH.fillColor);
-  brush.fillAlpha = doc.fillAlpha ?? DEFAULT_BRUSH.fillAlpha;
-  brush.bezierFactor = doc.bezierFactor ?? DEFAULT_BRUSH.bezierFactor;
-  brush.text = doc.text ?? DEFAULT_BRUSH.text;
-  brush.fontFamily = doc.fontFamily || DEFAULT_BRUSH.fontFamily;
-  brush.fontSize = doc.fontSize ?? DEFAULT_BRUSH.fontSize;
-  brush.textColor = _toHexString(doc.textColor, DEFAULT_BRUSH.textColor);
-  brush.textAlpha = doc.textAlpha ?? DEFAULT_BRUSH.textAlpha;
+  Object.assign(brush, _getDrawingManagedState(drawing.document));
+}
 
-  // Map ADT dash-pattern flags back to a stroke style name
-  if (game.modules.get("advanced-drawing-tools")?.active) {
-    const adtDash = doc.flags?.["advanced-drawing-tools"]?.lineStyle?.dash;
-    if (!adtDash || adtDash.length === 0) {
-      brush.strokeStyle = "solid";
-    } else if (
-      adtDash[0] === STROKE_DASH_PATTERNS.dotted[0] &&
-      adtDash[1] === STROKE_DASH_PATTERNS.dotted[1]
-    ) {
-      brush.strokeStyle = "dotted";
-    } else if (
-      adtDash[0] === STROKE_DASH_PATTERNS.dashed[0] &&
-      adtDash[1] === STROKE_DASH_PATTERNS.dashed[1]
-    ) {
-      brush.strokeStyle = "dashed";
+/**
+ * Get the current palette-managed state from the shared brush object.
+ */
+function _getBrushManagedState() {
+  return {
+    strokeColor: _toHexString(brush.strokeColor, DEFAULT_BRUSH.strokeColor),
+    strokeWidth: _coerceNumber(brush.strokeWidth, DEFAULT_BRUSH.strokeWidth, {
+      min: 0,
+    }),
+    strokeAlpha: _coerceNumber(brush.strokeAlpha, DEFAULT_BRUSH.strokeAlpha, {
+      min: 0,
+    }),
+    strokeStyle: brush.strokeStyle || DEFAULT_BRUSH.strokeStyle,
+    fillType: _coerceNumber(brush.fillType, DEFAULT_BRUSH.fillType, {
+      min: 0,
+    }),
+    fillColor: _toHexString(brush.fillColor, DEFAULT_BRUSH.fillColor),
+    fillAlpha: _coerceNumber(brush.fillAlpha, DEFAULT_BRUSH.fillAlpha, {
+      min: 0,
+    }),
+    bezierFactor: _coerceNumber(
+      brush.bezierFactor,
+      DEFAULT_BRUSH.bezierFactor,
+      { min: 0 },
+    ),
+    text: brush.text ?? DEFAULT_BRUSH.text,
+    fontFamily: brush.fontFamily ?? DEFAULT_BRUSH.fontFamily,
+    fontSize: _coerceNumber(brush.fontSize, DEFAULT_BRUSH.fontSize, {
+      min: 8,
+    }),
+    textColor: _toHexString(brush.textColor, DEFAULT_BRUSH.textColor),
+    textAlpha: _coerceNumber(brush.textAlpha, DEFAULT_BRUSH.textAlpha, {
+      min: 0,
+    }),
+  };
+}
+
+/**
+ * Get the palette-managed state from a drawing document.
+ */
+function _getDrawingManagedState(doc) {
+  return {
+    strokeColor: _toHexString(doc.strokeColor, DEFAULT_BRUSH.strokeColor),
+    strokeWidth: _coerceNumber(doc.strokeWidth, DEFAULT_BRUSH.strokeWidth, {
+      min: 0,
+    }),
+    strokeAlpha: _coerceNumber(doc.strokeAlpha, DEFAULT_BRUSH.strokeAlpha, {
+      min: 0,
+    }),
+    strokeStyle: _getStrokeStyleFromDocument(doc),
+    fillType: _coerceNumber(doc.fillType, DEFAULT_BRUSH.fillType, {
+      min: 0,
+    }),
+    fillColor: _toHexString(doc.fillColor, DEFAULT_BRUSH.fillColor),
+    fillAlpha: _coerceNumber(doc.fillAlpha, DEFAULT_BRUSH.fillAlpha, {
+      min: 0,
+    }),
+    bezierFactor: _coerceNumber(doc.bezierFactor, DEFAULT_BRUSH.bezierFactor, {
+      min: 0,
+    }),
+    text: doc.text ?? DEFAULT_BRUSH.text,
+    fontFamily: doc.fontFamily ?? DEFAULT_BRUSH.fontFamily,
+    fontSize: _coerceNumber(doc.fontSize, DEFAULT_BRUSH.fontSize, {
+      min: 8,
+    }),
+    textColor: _toHexString(doc.textColor, DEFAULT_BRUSH.textColor),
+    textAlpha: _coerceNumber(doc.textAlpha, DEFAULT_BRUSH.textAlpha, {
+      min: 0,
+    }),
+  };
+}
+
+/**
+ * Map ADT dash-pattern flags back to a stroke style name.
+ */
+function _getStrokeStyleFromDocument(doc) {
+  if (!game.modules.get("advanced-drawing-tools")?.active) {
+    return DEFAULT_BRUSH.strokeStyle;
+  }
+
+  const adtDash = doc.flags?.["advanced-drawing-tools"]?.lineStyle?.dash;
+  if (!adtDash || adtDash.length === 0) return "solid";
+  if (
+    adtDash[0] === STROKE_DASH_PATTERNS.dotted[0] &&
+    adtDash[1] === STROKE_DASH_PATTERNS.dotted[1]
+  ) {
+    return "dotted";
+  }
+  if (
+    adtDash[0] === STROKE_DASH_PATTERNS.dashed[0] &&
+    adtDash[1] === STROKE_DASH_PATTERNS.dashed[1]
+  ) {
+    return "dashed";
+  }
+  return "solid";
+}
+
+/**
+ * Track which palette-managed fields the user has changed while editing.
+ */
+function _syncSelectedDrawingTouchedFields(changedFields) {
+  if (!_selectedDrawingBaseline) return;
+
+  const brushState = _getBrushManagedState();
+  const fields = Array.isArray(changedFields)
+    ? changedFields
+    : typeof changedFields === "string"
+      ? [changedFields]
+      : Object.keys(_selectedDrawingBaseline);
+
+  for (const field of fields) {
+    if (!(field in _selectedDrawingBaseline)) continue;
+    if (brushState[field] === _selectedDrawingBaseline[field]) {
+      _selectedDrawingTouchedFields.delete(field);
     } else {
-      brush.strokeStyle = "solid";
+      _selectedDrawingTouchedFields.add(field);
     }
   }
 }
@@ -782,25 +902,27 @@ function _loadDrawingIntoBrush(drawing) {
 function _applyBrushToSelectedDrawing() {
   if (!_selectedDrawing?.document) return;
 
-  const updates = {
-    strokeColor: brush.strokeColor,
-    strokeWidth: brush.strokeWidth,
-    strokeAlpha: brush.strokeAlpha,
-    fillType: brush.fillType,
-    fillColor: brush.fillColor,
-    fillAlpha: brush.fillAlpha,
-    bezierFactor: brush.bezierFactor,
-    text: brush.text,
-    fontFamily: brush.fontFamily,
-    fontSize: brush.fontSize,
-    textColor: brush.textColor,
-    textAlpha: brush.textAlpha,
-  };
+  const brushState = _getBrushManagedState();
+  const drawingState = _getDrawingManagedState(_selectedDrawing.document);
+  const updates = {};
 
-  if (game.modules.get("advanced-drawing-tools")?.active) {
-    const dashPattern = STROKE_DASH_PATTERNS[brush.strokeStyle] || null;
-    updates["flags.advanced-drawing-tools.lineStyle.dash"] = dashPattern;
+  for (const field of _selectedDrawingTouchedFields) {
+    if (field === "strokeStyle") continue;
+    if (brushState[field] !== drawingState[field]) {
+      updates[field] = brushState[field];
+    }
   }
+
+  if (
+    game.modules.get("advanced-drawing-tools")?.active &&
+    _selectedDrawingTouchedFields.has("strokeStyle") &&
+    brushState.strokeStyle !== drawingState.strokeStyle
+  ) {
+    updates["flags.advanced-drawing-tools.lineStyle.dash"] =
+      STROKE_DASH_PATTERNS[brushState.strokeStyle] || null;
+  }
+
+  if (Object.keys(updates).length === 0) return;
 
   _selectedDrawing.document
     .update(updates)

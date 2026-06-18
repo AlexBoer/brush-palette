@@ -1,7 +1,7 @@
 /* Brush Palette Window */
 #brush-palette {
   min-width: 220px;
-  max-width: 250px;
+  max-width: 262px;
 }
 
 #brush-palette .window-content {
@@ -181,6 +181,16 @@
   flex: 1;
   min-width: 0;
   width: 0; /* allow flex shrink/grow */
+}
+
+#brush-palette .form-group.slim.full-width > .form-fields textarea {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  min-height: calc(var(--form-field-height) * 2);
+  line-height: 1.35;
+  resize: none;
+  overflow: hidden;
 }
 
 #brush-palette .fill-controls {
